@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>影之刃零 · 存档解析 | Phantom Blade Zero Save Inspector</title>
+<meta name="description" content="上传影之刃零 Steam 存档，在浏览器本地解析游玩时长、Boss 战死亡次数、收集进度。文件不会上传到任何服务器。">
+<link rel="stylesheet" href="assets/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230b0b0d'/><path d='M9 23L23 9M23 9h-7M23 9v7' stroke='%23cf2b2b' stroke-width='2.4' fill='none' stroke-linecap='square'/></svg>">
+</head>
+<body>
+
+<div class="noise" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="./index.html">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M5 19L19 5M19 5h-6M19 5v6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="square"/></svg>
+    </span>
+    <span class="brand-text">
+      <strong>影之刃零</strong>
+      <em>存档解析</em>
+    </span>
+  </a>
+  <div class="topbar-right">
+    <span class="privacy-chip" title="所有解析在浏览器内完成，档案不会离开本机">
+      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.3-2.9 7.7-7 9.5-4.1-1.8-7-5.2-7-9.5V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      全程本地解析
+    </span>
+    <button class="ghost-btn" id="btnGuide" type="button">存档在哪？</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ========== 上传 ========== -->
+  <section class="stage stage-upload" id="stageUpload">
+    <div class="hero">
+      <p class="eyebrow">PHANTOM BLADE ZERO · SAVE INSPECTOR</p>
+      <h1>读档，见你的<span class="ink">江湖</span></h1>
+      <p class="hero-sub">拖入 Steam 存档，立刻看到游玩时长、每个 Boss 让你倒下多少次、<br class="only-pc">收集与武器进度。文件留在本机，不上传、不留存。</p>
+    </div>
+
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="选择或拖入存档文件">
+      <input type="file" id="fileInput" accept=".sav,.bin,.dat" multiple hidden>
+      <input type="file" id="dirInput" webkitdirectory directory multiple hidden>
+      <div class="dz-frame">
+        <svg class="dz-icon" viewBox="0 0 48 48" width="42" height="42" aria-hidden="true">
+          <path d="M10 30v6a2 2 0 002 2h24a2 2 0 002-2v-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M24 30V9M24 9l-7 7M24 9l7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="dz-title">拖入 <code>PBZSaveGame.sav</code></p>
+        <p class="dz-sub">
+          <button type="button" class="text-btn" id="btnPickFile">选择文件</button>
+          <span class="dz-dot">·</span>
+          <button type="button" class="text-btn" id="btnPickDir">选择存档文件夹</button>
+        </p>
+        <p class="dz-hint">支持一次选中多个存档（主档 / RealTime / Hourly 备份），自动识别主存档</p>
+      </div>
+      <div class="dz-scan" aria-hidden="true"></div>
+    </div>
+
+    <div class="upload-foot">
+      <span class="path-hint"><b>典型路径</b> <code>…\PBZ\ProjectPBZ\Saved\SaveGames\Steam\&lt;SteamID&gt;\</code></span>
+      <button type="button" class="sample-btn" id="btnSample">
+        没有存档？看示例
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12h13M13 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
+    <ul class="features">
+      <li><b>GVAS 全格式</b><span>UE4 / UE5 存档，含压缩档</span></li>
+      <li><b>不止时长</b><span>Boss 战死数、收集、武器、货币</span></li>
+      <li><b>可分享</b><span>一键导出战绩长图</span></li>
+    </ul>
+
+  </section>
+
+  <!-- ========== 加载 ========== -->
+  <section class="stage stage-loading" id="stageLoading" hidden>
+    <div class="loader">
+      <div class="loader-blade" aria-hidden="true"></div>
+      <p class="loader-text" id="loaderText">正在剖开存档…</p>
+      <p class="loader-sub" id="loaderSub"></p>
+    </div>
+  </section>
+
+  <!-- ========== 错误 ========== -->
+  <section class="stage stage-error" id="stageError" hidden>
+    <div class="error-card">
+      <div class="error-mark">!</div>
+      <h2 id="errTitle">解析失败</h2>
+      <p id="errMsg"></p>
+      <div class="error-actions">
+        <button class="btn btn-ghost" type="button" id="btnErrBack">换个文件</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 结果 ========== -->
+  <section class="stage stage-result" id="stageResult" hidden>
+    <div class="result-bar">
+      <div class="file-info">
+        <span class="file-dot" aria-hidden="true"></span>
+        <strong id="fileName">PBZSaveGame.sav</strong>
+        <span class="file-meta" id="fileMeta"></span>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-ghost btn-sm" type="button" id="btnExport">导出 JSON</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="btnAgain">重新上传</button>
+      </div>
+    </div>
+
+    <div class="file-switch" id="fileSwitch" hidden></div>
+
+    <div class="notice" id="parseNotice" hidden>
+      <span class="notice-icon">!</span>
+      <span id="noticeText"></span>
+    </div>
+
+    <div class="tabbar" role="tablist">
+      <button class="tab is-active" data-tab="overview" role="tab" type="button">战绩概览</button>
+      <button class="tab" data-tab="raw" role="tab" type="button">原始数据 <span class="tab-count" id="rawCount"></span></button>
+    </div>
+
+    <div class="tab-panel" id="panelOverview">
+      <!-- 主卡 -->
+      <article class="card card-hero">
+        <div class="hero-inner">
+          <div class="hero-left">
+            <div class="name-row">
+              <h2 id="playerName">—</h2>
+              <span class="tag" id="tagDifficulty" hidden></span>
+              <span class="tag tag-warn" id="tagSixtySix" hidden>六十六天</span>
+              <span class="tag" id="tagNgPlus" hidden>二周目</span>
+            </div>
+            <p class="hero-region" id="regionLine">—</p>
+            <div class="hero-day" id="dayLine" hidden>
+              <span class="day-num" id="dayNow">0</span>
+              <span class="day-sep">/</span>
+              <span class="day-max" id="dayMax">66</span>
+              <span class="day-label">天</span>
+            </div>
+            <div class="hero-quote" id="verdictRank"></div>
+            <p class="hero-save" id="saveTimeLine" hidden></p>
+          </div>
+          <div class="hero-right">
+            <div class="bigtime">
+              <span class="bigtime-label">游玩时长</span>
+              <span class="bigtime-value"><b id="playTimeH">0</b><i>小时</i><b id="playTimeM" class="small">0</b><i class="small">分</i></span>
+            </div>
+            <div class="ring-wrap">
+              <svg class="ring" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
+                <circle cx="60" cy="60" r="52" class="ring-bg"/>
+                <circle cx="60" cy="60" r="52" class="ring-fg" id="ringFg"/>
+              </svg>
+              <div class="ring-label">
+                <b id="completionVal">—</b>
+                <span>完成度</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="hero-foot">
+          <p id="verdictLine">—</p>
+        </div>
+      </article>
+
+      <!-- 指标 -->
+      <div class="stat-grid" id="statGrid"></div>
+
+      <!-- Boss + 收集 -->
+      <div class="split">
+        <article class="card">
+          <header class="card-head">
+            <h3>Boss 战死亡榜</h3>
+            <span class="card-note" id="bossNote">—</span>
+          </header>
+          <div class="boss-list" id="bossList"></div>
+          <div class="empty-hint" id="bossEmpty" hidden>
+            <p>这份存档里没有可识别的 Boss 记录表。</p>
+            <p class="dim">可能尚未挑战 Boss，或该版本把记录存在其他字段。你可以在「原始数据」里查找含 Death / Attempt 的结构。</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <header class="card-head">
+            <h3>收集进度</h3>
+            <span class="card-note" id="collectNote">—</span>
+          </header>
+          <div class="collect-list" id="collectList"></div>
+          <div class="empty-hint" id="collectEmpty" hidden>
+            <p>未识别到收集品字段。</p>
+          </div>
+        </article>
+      </div>
+
+      <!-- 物品 -->
+      <div class="split split-2">
+        <article class="card">
+          <header class="card-head">
+            <h3>武器库</h3>
+            <span class="card-note" id="weaponNote">—</span>
+          </header>
+          <div class="chip-grid" id="weaponList"></div>
+          <div class="empty-hint" id="weaponEmpty" hidden><p>未识别到武器字段。</p></div>
+        </article>
+
+        <article class="card">
+          <header class="card-head">
+            <h3>行囊</h3>
+            <span class="card-note" id="itemNote">—</span>
+          </header>
+          <div class="chip-grid" id="itemList"></div>
+          <div class="empty-hint" id="itemEmpty" hidden><p>未识别到道具字段。</p></div>
+        </article>
+      </div>
+
+      <!-- 校验 -->
+      <article class="card card-calibrate">
+        <header class="card-head">
+          <h3>字段校准</h3>
+          <span class="card-note">自动识别有偏差时，手动指定字段</span>
+        </header>
+        <p class="calibrate-desc">
+          不同版本的游戏字段命名可能不同。若上面的数值不对，从下列字段中重新指定。<strong>选择会保存在本机</strong>，下次自动套用。
+        </p>
+        <div class="calibrate-grid" id="calibrateGrid"></div>
+        <button class="btn btn-ghost btn-sm" type="button" id="btnResetCalib">清除全部手动绑定</button>
+      </article>
+
+      <div class="share-bar">
+        <div class="share-text">
+          <strong>生成战绩卡</strong>
+          <span>一张深色长图，含时长、Boss 死亡榜与收集进度，可直接发到群里。</span>
+        </div>
+        <button class="btn btn-primary" type="button" id="btnShare">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 16V4M12 4L7 9M12 4l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 16v3a1 1 0 001 1h12a1 1 0 001-1v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          导出图片
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panelRaw" hidden>
+      <article class="card">
+        <header class="card-head">
+          <h3>属性树</h3>
+          <span class="card-note">点击行展开，支持搜索</span>
+        </header>
+        <div class="raw-toolbar">
+          <input type="search" id="rawSearch" placeholder="搜索字段名或路径，例如 Boss / Death / Weapon" autocomplete="off">
+          <span class="raw-stat" id="rawStat"></span>
+        </div>
+        <div class="raw-tree" id="rawTree"></div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <h3>解析信息</h3>
+        </header>
+        <dl class="meta-list" id="metaList"></dl>
+        <div class="warn-box" id="warnBox" hidden></div>
+      </article>
+    </div>
+  </section>
+
+  <footer class="site-foot">
+    <p>非官方工具 · 与灵游坊 / S-GAME 无关 · 所有解析在浏览器内完成，不会上传任何文件</p>
+    <p class="dim">GVAS 解析器支持 UE4 / UE5 存档格式；字段缺失时请使用「字段校准」手动指定。</p>
+  </footer>
+</main>
+
+<!-- 引导弹层 -->
+<div class="modal" id="guideModal" hidden>
+  <div class="modal-mask" data-close="1"></div>
+  <div class="modal-body" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <button class="modal-close" type="button" data-close="1" aria-label="关闭">×</button>
+    <h3 id="guideTitle">去哪找存档</h3>
+    <ol class="steps">
+      <li><b>Steam 版</b>：库中右键《影之刃零》→ 管理 → 浏览本地文件</li>
+      <li>依次进入 <code>PBZ\ProjectPBZ\Saved\SaveGames\Steam\</code></li>
+      <li>里面是 <code>你的 SteamID（一长串数字）</code> 文件夹</li>
+      <li>主存档为 <code>PBZSaveGame.sav</code>，同级还有 <code>RealTime</code> / <code>Hourly</code> / <code>Daily</code> 三个备份目录</li>
+    </ol>
+    <p class="modal-note">提示：整个文件夹一起拖进来也行，页面会自动挑出主存档，其余作为备份可选查看。</p>
+    <p class="modal-note dim">WeGame 版路径为 <code>…\ProjectPBZ\Saved\SaveGames\</code>，上层不是 Steam 目录。</p>
+  </div>
+</div>
+
+<script src="js/gvas-reader.js"></script>
+<script src="js/gvas-parser.js"></script>
+<script src="js/metrics.js"></script>
+<script src="js/sample-save.js"></script>
+<script src="js/share-card.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
