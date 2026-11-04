@@ -10,9 +10,9 @@
   --panel-2: #141419;
   --line: rgba(255, 255, 255, 0.07);
   --line-strong: rgba(255, 255, 255, 0.13);
-  --text: #ece9e4;
-  --text-dim: #9a9691;
-  --text-faint: #66635f;
+  --text: #f4f1ec;
+  --text-dim: #bdb8b1;
+  --text-faint: #a59e96;
   --crimson: #cd3430;
   --crimson-bright: #e8503f;
   --crimson-dim: rgba(205, 52, 48, 0.14);
@@ -75,7 +75,7 @@ body::before {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  background: radial-gradient(120% 90% at 50% 40%, transparent 62%, rgba(0, 0, 0, 0.42) 100%);
 }
 
 ::selection { background: rgba(205, 52, 48, 0.35); color: #fff; }
@@ -359,7 +359,7 @@ main {
 .path-hint code {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #7f7b76;
+  color: #a9a39c;
 }
 
 .sample-btn {
@@ -373,7 +373,6 @@ main {
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
-  opacity: 0.85;
   transition: opacity 0.2s, gap 0.2s;
 }
 .sample-btn:hover { opacity: 1; gap: 10px; }
@@ -1023,7 +1022,7 @@ main {
   line-height: 1.8;
 }
 .empty-hint p { margin: 0 0 4px; }
-.empty-hint .dim { color: #57544f; font-size: 11.5px; }
+.empty-hint .dim { color: #918b84; font-size: 11.5px; }
 
 /* ---------------- 校准 ---------------- */
 .card-calibrate { margin-top: 12px; }
@@ -1116,7 +1115,7 @@ main {
   outline: none;
   transition: border-color 0.2s;
 }
-.raw-toolbar input::placeholder { color: #55524e; }
+.raw-toolbar input::placeholder { color: #7f7972; }
 .raw-toolbar input:focus { border-color: rgba(205, 52, 48, 0.5); }
 
 .raw-stat {
@@ -1150,32 +1149,32 @@ main {
 .tree-caret {
   width: 10px;
   flex: none;
-  color: #4d4a46;
+  color: #756f68;
   transition: transform 0.15s;
   cursor: pointer;
   font-size: 9px;
 }
 .tree-caret.leaf { visibility: hidden; }
 
-.tree-name { color: #c8c4be; }
+.tree-name { color: #dcd8d2; }
 .tree-name mark { background: rgba(205, 52, 48, 0.35); color: #ffd9d4; padding: 0 1px; }
 
 .tree-type {
   font-size: 10px;
-  color: #5e5a55;
+  color: #89837c;
   letter-spacing: 0.02em;
 }
 
 .tree-val { color: var(--gold); }
 .tree-val.is-str { color: #8fb3a0; }
 .tree-val.is-bool { color: #a88fc0; }
-.tree-val.is-null { color: #5a5652; }
+.tree-val.is-null { color: #99928b; }
 
 .tree-bind {
   margin-left: auto;
   border: 1px solid transparent;
   background: none;
-  color: #4f4c48;
+  color: #77716a;
   font-family: var(--font-sans);
   font-size: 10px;
   padding: 0 6px;
@@ -1211,7 +1210,7 @@ main {
   background: rgba(211, 176, 120, 0.05);
   padding: 12px 14px;
   font-size: 11.5px;
-  color: #b6a68b;
+  color: #cdbfa6;
   font-family: var(--font-mono);
   line-height: 1.8;
   max-height: 200px;
@@ -1305,7 +1304,7 @@ main {
   color: var(--text-faint);
   letter-spacing: 0.03em;
 }
-.site-foot .dim { color: #4b4844; font-size: 10.5px; }
+.site-foot .dim { color: #8f8981; font-size: 10.5px; }
 
 /* ---------------- 响应式 ---------------- */
 @media (max-width: 880px) {
@@ -1434,7 +1433,7 @@ main {
   margin: 10px 0 0;
   font-size: 10.5px;
   letter-spacing: 0.06em;
-  color: #55524e;
+  color: #948e87;
   font-family: var(--font-mono);
 }
 
@@ -1476,7 +1475,7 @@ main {
   border: 1px solid rgba(211, 176, 120, 0.22);
   background: rgba(211, 176, 120, 0.055);
   font-size: 11.5px;
-  color: #bcae94;
+  color: #d3c6ad;
   line-height: 1.75;
 }
 .notice b { color: var(--gold); font-weight: 600; }

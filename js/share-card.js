@@ -11,9 +11,9 @@
   var C = {
     bg: '#0a0a0c',
     line: 'rgba(255,255,255,0.09)',
-    text: '#ece9e4',
-    dim: '#8a8783',
-    faint: '#5d5a56',
+    text: '#f4f1ec',
+    dim: '#bdb8b1',
+    faint: '#a09991',
     red: '#e8503f',
     redDeep: '#b8302c',
     gold: '#d3b078',
