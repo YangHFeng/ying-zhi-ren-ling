@@ -93,21 +93,49 @@ function pMap(name, keyType, valueType, entries) {
 }
 
 /* ---------------- 存档内容 ---------------- */
+/* 键名用游戏内部蓝图名，与 js/boss-atlas.js 里的 id 一一对应 */
 const bossEntries = [
-  ['Boss_JaggedSteel', [
-    pInt('DeathCount', 14), pInt('Attempts', 19), pInt64('TotalFightTimeSeconds', 4280), pBool('bDefeated', true)
+  ['BP_Monster_YuCong_FirstTime', [
+    pInt('DeathCount', 31), pInt('Attempts', 38), pInt64('TotalFightTimeSeconds', 9880), pBool('bDefeated', false)
   ]],
-  ['Boss_FrenziedBrute', [
-    pInt('DeathCount', 7), pInt('Attempts', 11), pInt64('TotalFightTimeSeconds', 2110), pBool('bDefeated', true)
-  ]],
-  ['Boss_BrideAhua', [
+  ['BP_Monster_AHua_GuiTouDao', [
     pInt('DeathCount', 23), pInt('Attempts', 30), pInt64('TotalFightTimeSeconds', 7620), pBool('bDefeated', true)
   ]],
-  ['Boss_AxemasterPengMeng', [
+  ['BP_Monster_MobMan_Elite_Sword', [
+    pInt('DeathCount', 14), pInt('Attempts', 19), pInt64('TotalFightTimeSeconds', 4280), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_YuCong_P1', [
+    pInt('DeathCount', 11), pInt('Attempts', 15), pInt64('TotalFightTimeSeconds', 3520), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_PengMeng_Axe', [
     pInt('DeathCount', 9), pInt('Attempts', 12), pInt64('TotalFightTimeSeconds', 3140), pBool('bDefeated', true)
   ]],
-  ['Boss_ThreeFacePuppet', [
-    pInt('DeathCount', 31), pInt('Attempts', 38), pInt64('TotalFightTimeSeconds', 9880), pBool('bDefeated', false)
+  ['BP_Monster_HookMan_P2', [
+    pInt('DeathCount', 7), pInt('Attempts', 11), pInt64('TotalFightTimeSeconds', 2110), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_HuaQianXIao', [
+    pInt('DeathCount', 6), pInt('Attempts', 9), pInt64('TotalFightTimeSeconds', 2460), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_MoTian_LongZhu_01', [
+    pInt('DeathCount', 5), pInt('Attempts', 8), pInt64('TotalFightTimeSeconds', 1980), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_ChiLian', [
+    pInt('DeathCount', 4), pInt('Attempts', 6), pInt64('TotalFightTimeSeconds', 1620), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_JingYe', [
+    pInt('DeathCount', 3), pInt('Attempts', 5), pInt64('TotalFightTimeSeconds', 1240), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_HookMan_HorseCartCombat', [
+    pInt('DeathCount', 2), pInt('Attempts', 3), pInt64('TotalFightTimeSeconds', 760), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_Zhuobi', [
+    pInt('DeathCount', 1), pInt('Attempts', 2), pInt64('TotalFightTimeSeconds', 520), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_QiShu_Huo', [
+    pInt('DeathCount', 0), pInt('Attempts', 1), pInt64('TotalFightTimeSeconds', 305), pBool('bDefeated', true)
+  ]],
+  ['BP_Monster_ZuoShang_Young_Tutorial', [
+    pInt('DeathCount', 0), pInt('Attempts', 1), pInt64('TotalFightTimeSeconds', 280), pBool('bDefeated', true)
   ]]
 ];
 

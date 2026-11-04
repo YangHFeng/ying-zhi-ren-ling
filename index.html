@@ -171,31 +171,31 @@
       <!-- 指标 -->
       <div class="stat-grid" id="statGrid"></div>
 
-      <!-- Boss + 收集 -->
-      <div class="split">
-        <article class="card">
-          <header class="card-head">
-            <h3>Boss 战死亡榜</h3>
-            <span class="card-note" id="bossNote">—</span>
-          </header>
-          <div class="boss-list" id="bossList"></div>
-          <div class="empty-hint" id="bossEmpty" hidden>
-            <p>这份存档里没有可识别的 Boss 记录表。</p>
-            <p class="dim">可能尚未挑战 Boss，或该版本把记录存在其他字段。你可以在「原始数据」里查找含 Death / Attempt 的结构。</p>
-          </div>
-        </article>
+      <!-- Boss 图鉴 -->
+      <article class="card card-bosses">
+        <header class="card-head">
+          <h3>Boss 战死图鉴</h3>
+          <span class="card-note" id="bossNote">—</span>
+        </header>
+        <div class="boss-grid" id="bossList"></div>
+        <div class="empty-hint" id="bossEmpty" hidden>
+          <p>这份存档里没有可识别的 Boss 记录表。</p>
+          <p class="dim">可能尚未挑战 Boss，或该版本把记录存在其他字段。你可以在「原始数据」里查找含 Death / Attempt 的结构。</p>
+        </div>
+        <p class="boss-credit">立绘与命名：游民星空《影之刃零》图鉴 · 版权归 S-GAME 所有</p>
+      </article>
 
-        <article class="card">
-          <header class="card-head">
-            <h3>收集进度</h3>
-            <span class="card-note" id="collectNote">—</span>
-          </header>
-          <div class="collect-list" id="collectList"></div>
-          <div class="empty-hint" id="collectEmpty" hidden>
-            <p>未识别到收集品字段。</p>
-          </div>
-        </article>
-      </div>
+      <!-- 收集 -->
+      <article class="card card-collect">
+        <header class="card-head">
+          <h3>收集进度</h3>
+          <span class="card-note" id="collectNote">—</span>
+        </header>
+        <div class="collect-list" id="collectList"></div>
+        <div class="empty-hint" id="collectEmpty" hidden>
+          <p>未识别到收集品字段。</p>
+        </div>
+      </article>
 
       <!-- 物品 -->
       <div class="split split-2">
@@ -292,6 +292,7 @@
 <script src="js/gvas-reader.js"></script>
 <script src="js/gvas-parser.js"></script>
 <script src="js/metrics.js"></script>
+<script src="js/boss-atlas.js"></script>
 <script src="js/sample-save.js"></script>
 <script src="js/share-card.js"></script>
 <script src="js/app.js"></script>

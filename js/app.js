@@ -17,14 +17,6 @@
     'very hard': '极难', hell: '修罗'
   };
 
-  var BOSS_DISPLAY = {
-    'Three Face Puppet': '三脸魔偶',
-    'Bride Ahua': '新娘阿花',
-    'Jagged Steel': '裂钢',
-    'Frenzied Brute': '狂血莽夫',
-    'Axemaster Peng Meng': '彭猛 · 斧匠'
-  };
-
   var COLLECT_CN = {
     petal: '花瓣', shard: '碎片', scroll: '卷轴', flower: '花', leaf: '叶',
     fragment: '残片', relic: '遗物', memory: '记忆', soul: '魂', essence: '精魄',
@@ -308,10 +300,83 @@
     return DIFFICULTY_CN[key] || P.Metrics.prettifyName(raw);
   }
 
-  function bossName(b) {
-    if (!b) return '未知';
-    if (BOSS_DISPLAY[b.name]) return BOSS_DISPLAY[b.name];
-    return b.name || b.rawName || '未知';
+  /**
+   * BOSS 图鉴匹配
+   *
+   * 存档里的 BOSS 标识通常是内部蓝图名（BP_Monster_YuCong_P1 之类），
+   * 也可能是中文名或英文名。按「精确 ID → 去前缀 → 最长前缀 → 中文名」依次尝试。
+   */
+  function matchBoss(raw) {
+    var atlas = window.PBZBossAtlas;
+    if (!atlas || !raw) return null;
+
+    var text = String(raw).trim();
+    var low = text.toLowerCase();
+
+    if (atlas.byId[low]) return atlas.byId[low];
+
+    var key = low.replace(/^boss_/, '').replace(/^bp_monster_/, '').replace(/[^a-z0-9_]/g, '');
+    if (!key) return matchBossByName(atlas, text);
+    if (atlas.byBase[key]) return atlas.byBase[key];
+
+    // 存档名比图鉴 ID 更具体：BP_Monster_Xxx_P2_Phase2 → 取最长前缀
+    var best = null;
+    var bestLen = 0;
+    for (var k in atlas.byBase) {
+      if (key.indexOf(k) === 0 && k.length > bestLen) {
+        best = atlas.byBase[k];
+        bestLen = k.length;
+      }
+    }
+    if (best) return best;
+
+    // 存档名比图鉴 ID 更笼统：取最短的一个（基础形态）
+    var loose = null;
+    var looseLen = Infinity;
+    for (var k2 in atlas.byBase) {
+      if (k2.indexOf(key) === 0 && k2.length < looseLen) {
+        loose = atlas.byBase[k2];
+        looseLen = k2.length;
+      }
+    }
+    if (loose) return loose;
+
+    return matchBossByName(atlas, text);
+  }
+
+  function matchBossByName(atlas, text) {
+    for (var i = 0; i < atlas.list.length; i++) {
+      var nm = atlas.list[i].name;
+      if (nm === text) return atlas.list[i];
+    }
+    for (var j = 0; j < atlas.list.length; j++) {
+      var n = atlas.list[j].name;
+      if (n.indexOf(text) >= 0 || text.indexOf(n) >= 0) return atlas.list[j];
+    }
+    return null;
+  }
+
+  /* 图鉴里没有的 Boss，把内部名转成可读形式 */
+  function prettyBossName(raw) {
+    if (!raw) return '未知';
+    if (/[\u4e00-\u9fa5]/.test(raw)) return raw;
+    return String(raw)
+      .replace(/^BP_Monster_/i, '')
+      .replace(/^Boss_/i, '')
+      .replace(/_/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\bP(\d)\b/gi, 'P$1')
+      .trim();
+  }
+
+  function bossMeta(b) {
+    var raw = b.name || b.rawName || '';
+    var hit = matchBoss(raw) || matchBoss(b.rawName) || matchBoss(b.display);
+    return {
+      display: hit ? hit.name : prettyBossName(raw),
+      img: hit ? hit.img : null,
+      region: hit ? hit.region : null
+    };
   }
 
   function renderResult() {
@@ -323,7 +388,7 @@
 
     var view = JSON.parse(JSON.stringify(metrics.view));
     view.bosses = view.bosses.map(function (b) {
-      return Object.assign({}, b, { display: bossName(b) });
+      return Object.assign({}, b, bossMeta(b));
     });
     view.worstBoss = view.bosses[0] && view.bosses[0].deaths ? view.bosses[0] : null;
     if (view.worstBoss) view.worstBoss = Object.assign({}, view.worstBoss, { name: view.worstBoss.display });
@@ -550,38 +615,36 @@
     empty.hidden = true;
     note.textContent = view.bossDefeated + ' / ' + view.bossTotal + ' 已击破';
 
-    var max = view.bosses[0].deaths || 1;
-    var shown = view.bosses.slice(0, 10);
+    // 全部交战记录都展示，按死亡次数从高到低
+    list.innerHTML = view.bosses.map(function (b, i) {
+      var art = b.img
+        ? '<img src="' + escapeHtml(b.img) + '" alt="" loading="lazy" decoding="async">'
+        : '<span class="boss-card-ghost">' + escapeHtml(String(b.display || '?').slice(0, 1)) + '</span>';
 
-    list.innerHTML = shown.map(function (b, i) {
-      var ratio = Math.max(2, ((b.deaths || 0) / max) * 100);
-      var badge = b.defeated === true
-        ? '<span class="cleared">已击破</span>'
-        : b.defeated === false
-          ? '<span class="uncleared">未击破</span>'
-          : '';
-      var meta = [];
-      if (b.attempts != null) meta.push('挑战 ' + b.attempts + ' 次');
-      if (b.timeSeconds != null) meta.push('耗时 ' + duration(b.timeSeconds));
-      return '' +
-        '<div class="boss-row' + (i === 0 ? ' is-top' : '') + '">' +
-        '<span class="boss-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
-        '<div class="boss-main">' +
-        '<div class="boss-line">' +
-        '<span class="boss-name" title="' + escapeHtml(b.rawName) + '">' + escapeHtml(b.display) + badge + '</span>' +
-        '<span class="boss-deaths">' + (b.deaths != null ? b.deaths : '—') + '<small>次</small></span>' +
+      var meta = b.region || '';
+      if (b.attempts != null) meta += (meta ? ' · ' : '') + '挑战 ' + b.attempts + ' 次';
+
+      // 未击破是少数情况，单独标出来；已击破不加标注，交给标题栏统计
+      var lost = b.defeated === false ? '<span class="boss-card-lost">未击破</span>' : '';
+
+      var title = b.display;
+      if (b.rawName && b.rawName !== b.display) title += ' · ' + b.rawName;
+      if (b.timeSeconds != null) title += ' · 耗时 ' + duration(b.timeSeconds);
+
+      var zero = b.deaths === 0 ? ' is-zero' : '';
+      var count = b.deaths != null ? b.deaths : '—';
+
+      return '<article class="boss-card' + (i === 0 ? ' is-top' : '') + '" title="' + escapeHtml(title) + '">' +
+        '<div class="boss-card-art">' + art + lost + '</div>' +
+        '<div class="boss-card-info">' +
+          '<div class="boss-card-name">' + escapeHtml(b.display) + '</div>' +
+          '<div class="boss-card-foot">' +
+            '<span class="boss-card-meta">' + escapeHtml(meta) + '</span>' +
+            '<span class="boss-card-count' + zero + '"><b>' + count + '</b><i>次</i></span>' +
+          '</div>' +
         '</div>' +
-        '<div class="boss-bar"><i data-w="' + ratio + '"></i></div>' +
-        (meta.length ? '<div class="boss-meta">' + meta.map(function (m) { return '<span>' + escapeHtml(m) + '</span>'; }).join('') + '</div>' : '') +
-        '</div>' +
-        '</div>';
+        '</article>';
     }).join('');
-
-    setTimeout(function () {
-      Array.prototype.forEach.call(list.querySelectorAll('.boss-bar i'), function (bar) {
-        bar.style.width = bar.getAttribute('data-w') + '%';
-      });
-    }, 60);
   }
 
   function renderCollectibles(view) {
