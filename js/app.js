@@ -1,5 +1,8 @@
 /**
  * app.js — 页面交互
+ *
+ * 数据流：File → PBZ.Save.open()（解密容器）→ readJson()（解压每个槽）
+ *        → PBZ.View.build()（折算战绩）→ 渲染
  */
 (function () {
   'use strict';
@@ -7,42 +10,28 @@
   var P = window.PBZ;
   var $ = function (sel) { return document.querySelector(sel); };
 
-  var STORAGE_KEY = 'pbz.saveOverrides.v1';
-  var MAX_FILES = 12;
+  var KEY_STORAGE = 'pbz.customKey.v1';
   var MAX_TREE_CHILDREN = 200;
 
-  var DIFFICULTY_CN = {
-    easy: '简单', story: '剧情', normal: '普通', standard: '普通',
-    hard: '困难', nightmare: '噩梦', brutal: '残酷', extreme: '极难',
-    'very hard': '极难', hell: '修罗'
+  var SLOT_LABEL = {
+    __Advanced__: '账户数据',
+    __Achievements__: '成就',
+    ManualSave: '手动存档',
+    AutoSave: '自动存档',
+    NightmareRun: '噩梦模式'
   };
-
-  var COLLECT_CN = {
-    petal: '花瓣', shard: '碎片', scroll: '卷轴', flower: '花', leaf: '叶',
-    fragment: '残片', relic: '遗物', memory: '记忆', soul: '魂', essence: '精魄',
-    coin: '铜钱', key: '钥匙', gem: '宝石', herb: '草药', bone: '骨',
-    blueprint: '图纸', material: '材料', token: '信物', charm: '护符', seal: '印记'
-  };
-
-  var BINDABLE = [
-    { key: 'playTime', label: '游玩时长' },
-    { key: 'deathCount', label: '死亡次数' },
-    { key: 'currency', label: '持有货币' },
-    { key: 'currentDay', label: '当前天数' },
-    { key: 'dayLimit', label: '天数上限' },
-    { key: 'completion', label: '完成度' },
-    { key: 'playerName', label: '角色名' },
-    { key: 'difficulty', label: '难度' },
-    { key: 'region', label: '当前区域' }
-  ];
 
   var state = {
-    entries: [],
+    file: null,
+    save: null,
+    slots: [],
     active: 0,
-    overrides: {},
+    view: null,
+    meta: null,
     tab: 'overview',
-    fields: [],
-    search: ''
+    search: '',
+    parseMs: 0,
+    key: ''
   };
 
   /* ------------------------------------------------------------------ *
@@ -71,7 +60,7 @@
   function fmtNum(n) {
     if (n == null || !isFinite(n)) return '—';
     if (Math.abs(n) >= 1000) return n.toLocaleString('en-US');
-    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+    return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(3)));
   }
 
   function duration(sec) {
@@ -83,84 +72,23 @@
     return h + ' 小时 ' + m + ' 分';
   }
 
-  function collectLabel(raw) {
-    var k = String(raw).toLowerCase().replace(/[^a-z]/g, '');
-    var cn = COLLECT_CN[k] || COLLECT_CN[k.replace(/s$/, '')];
-    return cn || P.Metrics.prettifyName(raw);
-  }
-
-  function toDate(v) {
-    var n = Number(v);
-    if (!n || !isFinite(n)) return null;
-    var ms;
-    if (n > 1e15) ms = n / 10000 - 62135596800000;   // .NET DateTime ticks
-    else if (n > 1e11) ms = n;                        // 毫秒时间戳
-    else if (n > 1e9) ms = n * 1000;                  // 秒时间戳
-    else return null;
-    var d = new Date(ms);
-    if (isNaN(d.getTime()) || d.getFullYear() < 2000 || d.getFullYear() > 2100) return null;
-    return d;
-  }
-
-  function fmtDate(d) {
-    return d.getFullYear() + '.' +
-      String(d.getMonth() + 1).padStart(2, '0') + '.' +
-      String(d.getDate()).padStart(2, '0') + ' ' +
-      String(d.getHours()).padStart(2, '0') + ':' +
-      String(d.getMinutes()).padStart(2, '0');
-  }
-
-  function loadOverrides() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {};
-    } catch (e) {
-      return {};
-    }
-  }
-
-  function saveOverrides() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.overrides));
-    } catch (e) { /* 隐私模式下忽略 */ }
-  }
-
   function countUp(el, to, suffix) {
     if (!el) return;
-    if (to == null || !isFinite(to)) {
-      el.textContent = '—';
-      return;
-    }
+    if (to == null || !isFinite(to)) { el.textContent = '—'; return; }
     var start = performance.now();
-    var dur = 750;
-    var from = 0;
+    var dur = 620;
     function step(now) {
       var t = Math.min(1, (now - start) / dur);
-      var eased = 1 - Math.pow(1 - t, 3);
-      var v = from + (to - from) * eased;
-      el.textContent = fmtInt(v);
+      var e = 1 - Math.pow(1 - t, 3);
+      el.textContent = Math.round(to * e).toLocaleString('en-US') + (suffix || '');
       if (t < 1) requestAnimationFrame(step);
-      else el.textContent = fmtInt(to) + (suffix || '');
     }
     requestAnimationFrame(step);
   }
 
-  function fileRank(file) {
-    var path = (file.webkitRelativePath || file.name || '').toLowerCase();
-    var score = 0;
-    if (/pbzsavegame\.sav$/.test(path)) score += 100;
-    else if (/\.sav$/.test(path)) score += 40;
-    if (/realtime/.test(path)) score += 20;
-    else if (/hourly/.test(path)) score += 12;
-    else if (/daily/.test(path)) score += 8;
-    return score;
-  }
-
-  /* ------------------------------------------------------------------ *
-   * 页面切换
-   * ------------------------------------------------------------------ */
   function showStage(name) {
     ['stageUpload', 'stageLoading', 'stageError', 'stageResult'].forEach(function (id) {
-      var el = document.getElementById(id);
+      var el = $('#' + id);
       if (el) el.hidden = id !== name;
     });
   }
@@ -169,19 +97,17 @@
     $('#errTitle').textContent = title;
     $('#errMsg').innerHTML = msg;
     showStage('stageError');
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
   /* ------------------------------------------------------------------ *
-   * 文件处理
+   * 读取文件
    * ------------------------------------------------------------------ */
   function walkEntry(entry, out, depth) {
     return new Promise(function (resolve) {
       if (depth > 6 || !entry) return resolve();
       if (entry.isFile) {
-        entry.file(function (file) {
-          out.push(file);
-          resolve();
-        }, function () { resolve(); });
+        entry.file(function (file) { out.push(file); resolve(); }, function () { resolve(); });
         return;
       }
       if (entry.isDirectory) {
@@ -190,8 +116,7 @@
         function readBatch() {
           reader.readEntries(function (entries) {
             if (!entries.length) {
-              Promise.all(all.map(function (e) { return walkEntry(e, out, depth + 1); }))
-                .then(function () { resolve(); });
+              Promise.all(all.map(function (e) { return walkEntry(e, out, depth + 1); })).then(function () { resolve(); });
               return;
             }
             all = all.concat(Array.prototype.slice.call(entries));
@@ -207,285 +132,230 @@
 
   async function filesFromDrop(dt) {
     var items = dt.items ? Array.prototype.slice.call(dt.items) : [];
-    var entries = items
-      .map(function (i) { return i.webkitGetAsEntry ? i.webkitGetAsEntry() : null; })
-      .filter(Boolean);
+    var entries = items.map(function (i) { return i.webkitGetAsEntry ? i.webkitGetAsEntry() : null; }).filter(Boolean);
     if (!entries.length) return Array.prototype.slice.call(dt.files || []);
     var out = [];
-    for (var i = 0; i < entries.length; i++) {
-      await walkEntry(entries[i], out, 0);
-    }
+    for (var i = 0; i < entries.length; i++) await walkEntry(entries[i], out, 0);
     return out.length ? out : Array.prototype.slice.call(dt.files || []);
   }
 
-  async function handleFileList(list) {
+  /** 从一堆文件里挑出存档候选，主存档优先 */
+  function pickSaves(list) {
     var files = Array.prototype.slice.call(list).filter(function (f) {
-      return f && f.size > 0 && !/\.(ini|log|png|jpg|txt)$/i.test(f.name);
+      return f && f.size > 4096 && !/\.(ini|log|png|jpg|jpeg|txt|dll|exe)$/i.test(f.name);
     });
-
-    if (!files.length) {
-      showError('没有可解析的文件', '请选择 <code>PBZSaveGame.sav</code>，或直接拖入整个存档文件夹。');
-      return;
-    }
-
-    files.sort(function (a, b) { return fileRank(b) - fileRank(a); });
-    files = files.slice(0, MAX_FILES);
-
-    $('#loaderText').textContent = '正在剖开存档…';
-    $('#loaderSub').textContent = files.length > 1 ? files.length + ' 个文件待解析' : files[0].name;
-    showStage('stageLoading');
-
-    var entries = [];
-    var t0 = performance.now();
-
-    for (var i = 0; i < files.length; i++) {
-      var f = files[i];
-      try {
-        var buf = await f.arrayBuffer();
-        var parsed = await P.GvasParser.parseSave(new Uint8Array(buf));
-        entries.push({
-          name: f.name,
-          path: f.webkitRelativePath || f.name,
-          size: f.size,
-          parsed: parsed,
-          warningCount: (parsed.warnings || []).length
-        });
-      } catch (err) {
-        entries.push({ name: f.name, path: f.webkitRelativePath || f.name, size: f.size, error: err.message });
-      }
-    }
-
-    var elapsed = performance.now() - t0;
-    var okIndex = entries.findIndex(function (e) { return !e.error; });
-
-    if (okIndex < 0) {
-      var reason = entries[0] && entries[0].error ? entries[0].error : '未知错误';
-      showError(
-        '没能解析这份存档',
-        '文件：<code>' + escapeHtml(entries[0].name) + '</code><br><br>' + escapeHtml(reason) +
-        '<br><br>常见原因：文件被 Steam 云同步占用、选了配置文件、或该版本使用了不支持的压缩方式。'
-      );
-      return;
-    }
-
-    state.entries = entries;
-    state.active = okIndex;
-    state.overrides = loadOverrides();
-    state.parseMs = Math.round(elapsed);
-
-    var minDelay = new Promise(function (r) { setTimeout(r, 380); });
-    await minDelay;
-
-    renderResult();
-    showStage('stageResult');
-    window.scrollTo({ top: 0, behavior: 'auto' });
+    files.sort(function (a, b) {
+      var sa = /^PBZSaveGame\.sav$/i.test(a.name) ? 2 : /\.sav$/i.test(a.name) ? 1 : 0;
+      var sb = /^PBZSaveGame\.sav$/i.test(b.name) ? 2 : /\.sav$/i.test(b.name) ? 1 : 0;
+      if (sa !== sb) return sb - sa;
+      return b.size - a.size;
+    });
+    return files;
   }
 
   /* ------------------------------------------------------------------ *
-   * 渲染：结果
+   * 主流程
    * ------------------------------------------------------------------ */
-  function current() {
-    return state.entries[state.active];
-  }
+  async function handleFileList(list) {
+    var files = pickSaves(list);
+    if (!files.length) {
+      showError('没有可解析的文件', '请选择 <code>PBZSaveGame.sav</code>（约 200KB ~ 2MB）。');
+      return;
+    }
 
-  function buildMetrics() {
-    var entry = current();
-    if (!entry || entry.error) return null;
-    return P.Metrics.build(entry.parsed, state.overrides);
-  }
+    $('#loaderText').textContent = '正在剖开存档…';
+    $('#loaderSub').textContent = files[0].name;
+    showStage('stageLoading');
 
-  function difficultyText(raw) {
-    if (!raw) return null;
-    var key = String(raw).toLowerCase();
-    return DIFFICULTY_CN[key] || P.Metrics.prettifyName(raw);
-  }
+    var file = files[0];
+    var t0 = performance.now();
 
-  /**
-   * BOSS 图鉴匹配
-   *
-   * 存档里的 BOSS 标识通常是内部蓝图名（BP_Monster_YuCong_P1 之类），
-   * 也可能是中文名或英文名。按「精确 ID → 去前缀 → 最长前缀 → 中文名」依次尝试。
-   */
-  function matchBoss(raw) {
-    var atlas = window.PBZBossAtlas;
-    if (!atlas || !raw) return null;
+    try {
+      var buf = await file.arrayBuffer();
+      var save = await P.Save.open(buf, { key: state.key || undefined });
 
-    var text = String(raw).trim();
-    var low = text.toLowerCase();
+      $('#loaderText').textContent = '正在解压存档槽…';
+      $('#loaderSub').textContent = save.header.slotCount + ' 个槽位';
 
-    if (atlas.byId[low]) return atlas.byId[low];
-
-    var key = low.replace(/^boss_/, '').replace(/^bp_monster_/, '').replace(/[^a-z0-9_]/g, '');
-    if (!key) return matchBossByName(atlas, text);
-    if (atlas.byBase[key]) return atlas.byBase[key];
-
-    // 存档名比图鉴 ID 更具体：BP_Monster_Xxx_P2_Phase2 → 取最长前缀
-    var best = null;
-    var bestLen = 0;
-    for (var k in atlas.byBase) {
-      if (key.indexOf(k) === 0 && k.length > bestLen) {
-        best = atlas.byBase[k];
-        bestLen = k.length;
+      var slots = [];
+      for (var i = 0; i < save.slots.length; i++) {
+        var slot = save.slots[i];
+        var rec = {
+          name: slot.name,
+          algorithm: slot.algorithm,
+          rawSize: slot.rawSize,
+          blockSize: slot.blockSize,
+          json: null,
+          error: null
+        };
+        try {
+          rec.json = await save.readJson(slot);
+        } catch (e) {
+          rec.error = e.message;
+        }
+        slots.push(rec);
       }
-    }
-    if (best) return best;
 
-    // 存档名比图鉴 ID 更笼统：取最短的一个（基础形态）
-    var loose = null;
-    var looseLen = Infinity;
-    for (var k2 in atlas.byBase) {
-      if (k2.indexOf(key) === 0 && k2.length < looseLen) {
-        loose = atlas.byBase[k2];
-        looseLen = k2.length;
+      state.file = file;
+      state.save = save;
+      state.slots = slots;
+      state.parseMs = Math.round(performance.now() - t0);
+      state.active = pickDefaultSlot(slots);
+
+      var ok = slots.filter(function (s) { return s.json; }).length;
+      if (!ok) throw new Error('所有存档槽都解压失败');
+
+      await new Promise(function (r) { setTimeout(r, 260); });
+
+      renderResult();
+      showStage('stageResult');
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    } catch (err) {
+      var msg = err.message || String(err);
+      var extra = '';
+      if (/密钥/.test(msg)) {
+        extra = '<br><br>这份存档可能来自更新后的游戏版本。到「解析信息」里填入新的 64 位密钥，或换回旧版存档。';
+      } else if (/Oodle/i.test(msg)) {
+        extra = '<br><br>Oodle 解码器没能加载，请检查网络后刷新页面。';
       }
+      showError('没能解析这份存档', '文件：<code>' + escapeHtml(file.name) + '</code><br><br>' + escapeHtml(msg) + extra);
     }
-    if (loose) return loose;
-
-    return matchBossByName(atlas, text);
   }
 
-  function matchBossByName(atlas, text) {
-    for (var i = 0; i < atlas.list.length; i++) {
-      var nm = atlas.list[i].name;
-      if (nm === text) return atlas.list[i];
-    }
-    for (var j = 0; j < atlas.list.length; j++) {
-      var n = atlas.list[j].name;
-      if (n.indexOf(text) >= 0 || text.indexOf(n) >= 0) return atlas.list[j];
-    }
-    return null;
+  /** 默认选中「最近一次游玩」的槽 */
+  function pickDefaultSlot(slots) {
+    var best = -1;
+    var bestTime = '';
+    slots.forEach(function (s, i) {
+      if (!s.json) return;
+      var t = (s.json.PBZGameSystem || {}).DateTimeString || '';
+      if (!/^__/.test(s.name) && t > bestTime) { bestTime = t; best = i; }
+    });
+    if (best >= 0) return best;
+    for (var i = 0; i < slots.length; i++) if (slots[i].json) return i;
+    return 0;
   }
 
-  /* 图鉴里没有的 Boss，把内部名转成可读形式 */
-  function prettyBossName(raw) {
-    if (!raw) return '未知';
-    if (/[\u4e00-\u9fa5]/.test(raw)) return raw;
-    return String(raw)
-      .replace(/^BP_Monster_/i, '')
-      .replace(/^Boss_/i, '')
-      .replace(/_/g, ' ')
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/\bP(\d)\b/gi, 'P$1')
-      .trim();
+  function currentSlot() {
+    return state.slots[state.active];
   }
 
-  function bossMeta(b) {
-    var raw = b.name || b.rawName || '';
-    var hit = matchBoss(raw) || matchBoss(b.rawName) || matchBoss(b.display);
-    return {
-      display: hit ? hit.name : prettyBossName(raw),
-      img: hit ? hit.img : null,
-      region: hit ? hit.region : null
-    };
-  }
-
+  /* ------------------------------------------------------------------ *
+   * 渲染
+   * ------------------------------------------------------------------ */
   function renderResult() {
-    var entry = current();
-    var metrics = buildMetrics();
-    if (!metrics) return;
+    var slot = currentSlot();
+    if (!slot || !slot.json) return;
 
-    state.fields = metrics.fields;
+    var built = P.View.build(
+      { json: slot.json, slotName: slot.name, size: state.file.size, slotCount: state.save.header.slotCount },
+      {
+        atlas: window.PBZBossAtlas,
+        advanced: (byName('__Advanced__') || {}).json,
+        achievements: (byName('__Achievements__') || {}).json
+      }
+    );
 
-    var view = JSON.parse(JSON.stringify(metrics.view));
-    view.bosses = view.bosses.map(function (b) {
-      return Object.assign({}, b, bossMeta(b));
-    });
-    view.worstBoss = view.bosses[0] && view.bosses[0].deaths ? view.bosses[0] : null;
-    if (view.worstBoss) view.worstBoss = Object.assign({}, view.worstBoss, { name: view.worstBoss.display });
-    view.collectibles = view.collectibles.map(function (c) {
-      return Object.assign({}, c, { label: collectLabel(c.label) });
-    });
+    state.view = built.view;
+    state.meta = built.meta;
 
-    view.verdict = JSON.parse(JSON.stringify(metrics.view.verdict));
-    if (view.worstBoss && metrics.view.worstBoss) {
-      view.verdict.lines = view.verdict.lines.map(function (l) {
-        return l.replace(metrics.view.worstBoss.name, view.worstBoss.name);
-      });
-    }
-    state.view = view;
-
-    // 顶部文件信息
-    $('#fileName').textContent = entry.name;
-    var bits = [fmtBytes(entry.size)];
-    if (entry.parsed.compressed) bits.push('已解压');
-    bits.push('UE ' + metrics.meta.engine);
-    bits.push('解析 ' + (state.parseMs || 0) + 'ms');
+    var bits = [fmtBytes(state.file.size), 'PBZS v' + state.save.header.version, state.save.header.slotCount + ' 槽'];
+    bits.push('解析 ' + state.parseMs + 'ms');
+    $('#fileName').textContent = state.file.name;
     $('#fileMeta').textContent = bits.join(' · ');
 
-    // 文件切换
-    renderFileSwitch();
+    renderSlots();
+    renderHero(state.view);
+    renderStats(state.view);
+    renderBosses(state.view);
+    renderCollectibles(state.view);
+    renderChips('#weaponList', '#weaponEmpty', '#weaponNote', weaponsAsChips(state.view), '把');
+    renderChips('#itemList', '#itemEmpty', '#itemNote', state.view.items, '种');
 
-    // 主卡
-    renderHero(view, metrics);
-
-    // 指标
-    renderStats(view, metrics);
-
-    // Boss
-    renderBosses(view);
-
-    // 收集
-    renderCollectibles(view);
-
-    // 武器 / 道具
-    renderChips('#weaponList', '#weaponEmpty', '#weaponNote', view.weapons, '件');
-    renderChips('#itemList', '#itemEmpty', '#itemNote', view.items, '件');
-
-    // 校准
-    renderCalibrate(metrics);
-
-    // 解析质量提示
     var notice = $('#parseNotice');
-    var ratio = metrics.meta.consumedRatio;
-    if (metrics.warnings.length > 4 || ratio < 0.92) {
+    if (state.view.bosses.length === 0) {
       notice.hidden = false;
-      $('#noticeText').innerHTML =
-        '解析覆盖 <b>' + (ratio * 100).toFixed(1) + '%</b> 字节，' +
-        (metrics.warnings.length ? '有 ' + metrics.warnings.length + ' 条提示' : '部分字段可能未识别') +
-        '。可到「原始数据」核对，或用下方「字段校准」手动指定指标。';
+      $('#noticeText').innerHTML = '这个槽位里没有 Boss 记录，通常表示还没有打过首领，或这是账户数据 / 成就槽。切换到存档槽里的其他条目看看。';
     } else {
       notice.hidden = true;
     }
 
-    // 原始数据
-    $('#rawCount').textContent = metrics.fields.length ? '(' + metrics.fields.length + ')' : '';
+    state.search = '';
+    $('#rawSearch').value = '';
     renderRaw();
-    renderMeta(metrics);
+    renderMeta();
   }
 
-  function renderFileSwitch() {
-    var box = $('#fileSwitch');
-    if (state.entries.length <= 1) {
-      box.hidden = true;
-      return;
+  function byName(name) {
+    for (var i = 0; i < state.slots.length; i++) {
+      if (state.slots[i].name === name) return state.slots[i];
     }
-    box.hidden = false;
-    box.innerHTML = state.entries.map(function (e, i) {
-      var cls = 'file-pill' + (i === state.active ? ' is-active' : '');
-      var label = escapeHtml(e.name);
-      var tail = e.error ? '<small>失败</small>' : '<small>' + fmtBytes(e.size) + '</small>';
-      return '<button type="button" class="' + cls + '" data-index="' + i + '">' + label + tail + '</button>';
+    return null;
+  }
+
+  function slotTitle(name) {
+    var m = String(name).match(/^(ManualSave|AutoSave|NightmareRun)(\d+)$/);
+    if (m) return (SLOT_LABEL[m[1]] || m[1]) + ' ' + m[2];
+    return SLOT_LABEL[name] || name;
+  }
+
+  function renderSlots() {
+    var box = $('#slotGrid');
+    var note = $('#slotNote');
+    var playable = state.slots.filter(function (s) { return s.json && !/^__/.test(s.name); });
+    var account = state.slots.filter(function (s) { return s.json && /^__/.test(s.name); });
+
+    note.textContent = playable.length + ' 个游玩档 · ' + account.length + ' 个账户档';
+
+    box.innerHTML = state.slots.map(function (s, i) {
+      var g = s.json ? (s.json.PBZGameSystem || {}) : {};
+      var deaths = s.json ? (s.json.PBZDeathMeta || {}).DiedTimes : null;
+      var isMeta = /^__/.test(s.name);
+      var meta = s.error
+        ? '<span class="slot-err">解压失败</span>'
+        : isMeta
+          ? '<span>' + (s.json.__Achievements__ ? '' : slotSummaryMeta(s)) + '</span>'
+          : '<span>' + (g.DateTimeString || '—') + '</span><span>死亡 ' + (deaths != null ? deaths : '—') + '</span>';
+
+      return '<button type="button" class="slot-card' + (i === state.active ? ' is-active' : '') + (isMeta ? ' is-meta' : '') + '" data-slot="' + i + '"' + (s.error ? ' disabled' : '') + '>' +
+        '<span class="slot-name">' + escapeHtml(slotTitle(s.name)) + '</span>' +
+        '<span class="slot-meta">' + meta + '</span>' +
+        '<span class="slot-size">' + fmtBytes(s.rawSize) + '</span>' +
+        '</button>';
     }).join('');
   }
 
-  function renderHero(view, metrics) {
-    $('#playerName').textContent = view.playerName || '无名剑客';
+  function slotSummaryMeta(slot) {
+    var j = slot.json || {};
+    if (slot.name === '__Achievements__') {
+      var ids = Array.isArray(j.UnlockedIds) ? j.UnlockedIds.length : null;
+      return ids != null ? '已解锁 ' + ids + ' 个' : '—';
+    }
+    if (slot.name === '__Advanced__') {
+      var codex = (j.Codex || {}).DiscoveredEnemies;
+      return Array.isArray(codex) ? '敌人图鉴 ' + codex.length : '账户与外观';
+    }
+    return '';
+  }
 
-    var diff = difficultyText(view.difficulty);
+  function renderHero(view) {
+    $('#playerName').textContent = view.playerName || '魂';
+
     var tagDiff = $('#tagDifficulty');
-    if (diff) {
+    if (view.difficulty) {
       tagDiff.hidden = false;
-      tagDiff.textContent = diff;
+      tagDiff.textContent = view.difficulty;
     } else tagDiff.hidden = true;
 
-    var tag66 = $('#tagSixtySix');
-    tag66.hidden = !view.sixtySixMode;
+    $('#tagSixtySix').hidden = !(view.dayLimit === 66 && view.finished);
+    $('#tagNgPlus').hidden = !view.newGamePlus;
+    if (view.newGamePlus && view.cycleCount != null) {
+      $('#tagNgPlus').textContent = (view.cycleCount + 1) + ' 周目';
+    }
 
-    var tagNg = $('#tagNgPlus');
-    tagNg.hidden = !view.newGamePlus;
-
-    var region = view.region ? P.Metrics.prettifyName(String(view.region).replace(/^(Region|Area|Map)_/, '')) : '';
-    $('#regionLine').textContent = region ? region : '存档解析完成 · ' + metrics.meta.className.replace('/Script/', '');
+    $('#regionLine').textContent = view.levelName
+      ? '当前区域 · ' + view.levelName
+      : '存档解析完成 · PBZS v3';
 
     var dayLine = $('#dayLine');
     if (view.day != null) {
@@ -499,10 +369,9 @@
     $('#verdictRank').textContent = view.verdict.rank ? '「' + view.verdict.rank + '」' : '';
 
     var saveLine = $('#saveTimeLine');
-    var savedAt = metrics.found.saveTime ? toDate(metrics.found.saveTime.field.value) : null;
-    if (savedAt) {
+    if (view.savedAt) {
       saveLine.hidden = false;
-      saveLine.textContent = '最后存档 · ' + fmtDate(savedAt);
+      saveLine.textContent = '最后存档 · ' + String(view.savedAt).replace('-', ' ');
     } else {
       saveLine.hidden = true;
     }
@@ -512,20 +381,18 @@
     countUp($('#playTimeH'), hours);
     $('#playTimeM').textContent = minutes == null ? '—' : minutes;
 
+    var pct = view.bossTotal ? (view.bossDefeated / view.bossTotal) * 100 : 0;
+    $('#completionVal').textContent = view.bossTotal ? Math.round(pct) + '%' : '—';
     var ring = $('#ringFg');
-    var pct = view.completion != null ? Math.max(0, Math.min(100, view.completion)) : 0;
-    $('#completionVal').textContent = view.completion != null ? Math.round(view.completion) + '%' : '—';
     requestAnimationFrame(function () {
       ring.style.strokeDashoffset = String(327 * (1 - pct / 100));
     });
 
     var lines = view.verdict.lines.length ? view.verdict.lines : ['存档解析完成。'];
-    $('#verdictLine').innerHTML = lines.map(function (l) {
-      return '<span>' + escapeHtml(l) + '</span>';
-    }).join('');
+    $('#verdictLine').innerHTML = lines.map(function (l) { return '<span>' + escapeHtml(l) + '</span>'; }).join('');
   }
 
-  function renderStats(view, metrics) {
+  function renderStats(view) {
     var perHour = null;
     if (view.deathCount != null && view.playTimeSeconds > 0) {
       perHour = view.deathCount / Math.max(view.playTimeSeconds / 3600, 0.5);
@@ -537,44 +404,38 @@
         value: view.deathCount,
         unit: '次',
         sub: perHour != null ? '平均每小时 ' + perHour.toFixed(1) + ' 次' : '存档未记录',
-        accent: true,
-        kind: 'int'
+        accent: true
       },
       {
         label: 'Boss 击破',
         value: view.bossTotal ? view.bossDefeated : null,
         unit: view.bossTotal ? '/ ' + view.bossTotal : '',
-        sub: view.worstBoss ? '最难关：' + view.worstBoss.name : (view.bossTotal ? '全部击破' : '未记录'),
-        kind: 'int'
+        sub: view.worstBoss ? '最难关：' + view.worstBoss.name : (view.bossTotal ? '全部击破' : '未记录')
       },
       {
-        label: '持有货币',
+        label: '意识之尘',
         value: view.currency,
         unit: '',
-        sub: '存档内货币总量',
-        kind: 'int',
+        sub: '存档内持有量',
         gold: true
       },
       {
         label: '当前天数',
         value: view.day,
         unit: view.dayLimit ? '/ ' + view.dayLimit + ' 天' : '天',
-        sub: view.dayLimit && view.day != null ? '剩余 ' + Math.max(0, view.dayLimit - view.day) + ' 天' : '存档未记录',
-        kind: 'int'
+        sub: view.remainingDays != null ? '剩余 ' + view.remainingDays + ' 天' : '存档未记录'
       },
       {
         label: '武器',
         value: view.weapons ? view.weapons.count : null,
-        unit: '件',
-        sub: view.edges ? '副武器 ' + view.edges.count + ' 件' : (view.weapons ? '已解锁主武器' : '存档未记录'),
-        kind: 'int'
+        unit: '把',
+        sub: view.weapons ? '最高强化 +' + view.weapons.maxPlus : '存档未记录'
       },
       {
         label: '行囊',
         value: view.items ? view.items.count : null,
         unit: '种',
-        sub: view.items && view.items.total ? '合计 ' + view.items.total + ' 件' : '物品条目数',
-        kind: 'int'
+        sub: view.items && view.items.total ? '合计 ' + view.items.total + ' 件' : '物品条目数'
       }
     ];
 
@@ -607,7 +468,7 @@
       list.innerHTML = '';
       list.hidden = true;
       empty.hidden = false;
-      note.textContent = '未识别';
+      note.textContent = '未记录';
       return;
     }
 
@@ -615,7 +476,6 @@
     empty.hidden = true;
     note.textContent = view.bossDefeated + ' / ' + view.bossTotal + ' 已击破';
 
-    // 全部交战记录都展示，按死亡次数从高到低
     list.innerHTML = view.bosses.map(function (b, i) {
       var art = b.img
         ? '<img src="' + escapeHtml(b.img) + '" alt="" loading="lazy" decoding="async">'
@@ -624,12 +484,11 @@
       var meta = b.region || '';
       if (b.attempts != null) meta += (meta ? ' · ' : '') + '挑战 ' + b.attempts + ' 次';
 
-      // 未击破是少数情况，单独标出来；已击破不加标注，交给标题栏统计
       var lost = b.defeated === false ? '<span class="boss-card-lost">未击破</span>' : '';
 
       var title = b.display;
       if (b.rawName && b.rawName !== b.display) title += ' · ' + b.rawName;
-      if (b.timeSeconds != null) title += ' · 耗时 ' + duration(b.timeSeconds);
+      if (b.bestTime) title += ' · 最快 ' + b.bestTime;
 
       var zero = b.deaths === 0 ? ' is-zero' : '';
       var count = b.deaths != null ? b.deaths : '—';
@@ -652,40 +511,39 @@
     var empty = $('#collectEmpty');
     var note = $('#collectNote');
 
-    if (!view.collectibles.length) {
+    var rows = view.collectibles.slice();
+
+    if (!rows.length) {
       list.innerHTML = '';
       list.hidden = true;
       empty.hidden = false;
-      note.textContent = '未识别';
+      note.textContent = '未记录';
       return;
     }
 
     list.hidden = false;
     empty.hidden = true;
+    note.textContent = rows.length + ' 项统计';
 
-    var done = view.collectibles.filter(function (c) {
-      return c.total && c.value != null && c.value >= c.total;
-    }).length;
-    note.textContent = done + ' / ' + view.collectibles.length + ' 已集满';
-
-    list.innerHTML = view.collectibles.map(function (c) {
-      var pct = c.percent == null ? 0 : c.percent;
+    list.innerHTML = rows.map(function (c) {
       return '' +
         '<div class="collect-item">' +
         '<div class="collect-top">' +
-        '<span class="collect-name">' + escapeHtml(collectLabel(c.label)) + '</span>' +
-        '<span class="collect-val">' + (c.value != null ? c.value : '—') +
-        (c.total ? '<small>/ ' + c.total + '</small>' : '') + '</span>' +
+        '<span class="collect-name">' + escapeHtml(c.label) + '</span>' +
+        '<span class="collect-val">' + fmtInt(c.value) + (c.total ? '<small>/ ' + c.total + '</small>' : '') + '</span>' +
         '</div>' +
-        '<div class="collect-bar"><i data-w="' + pct + '"></i></div>' +
         '</div>';
     }).join('');
+  }
 
-    setTimeout(function () {
-      Array.prototype.forEach.call(list.querySelectorAll('.collect-bar i'), function (bar) {
-        bar.style.width = bar.getAttribute('data-w') + '%';
-      });
-    }, 60);
+  /** 武器列表转成 chip 结构 */
+  function weaponsAsChips(view) {
+    if (!view.weapons || !view.weapons.count) return null;
+    return {
+      items: view.weapons.items.map(function (w) {
+        return { name: w.name + (w.plus ? ' +' + w.plus : ''), raw: w.raw, count: null };
+      })
+    };
   }
 
   function renderChips(listSel, emptySel, noteSel, data, unit) {
@@ -693,11 +551,11 @@
     var empty = $(emptySel);
     var note = $(noteSel);
 
-    if (!data || !data.items.length) {
+    if (!data || !data.items || !data.items.length) {
       el.innerHTML = '';
       el.hidden = true;
       empty.hidden = false;
-      note.textContent = '未识别';
+      note.textContent = '未记录';
       return;
     }
 
@@ -705,550 +563,383 @@
     empty.hidden = true;
     note.textContent = data.items.length + ' ' + unit;
 
-    el.innerHTML = data.items.slice(0, 48).map(function (item) {
-      var count = item.count != null ? '<span class="n">×' + item.count + '</span>' : '';
-      return '<span class="chip" title="' + escapeHtml(item.raw) + '">' + escapeHtml(item.name) + count + '</span>';
-    }).join('') + (data.items.length > 48
-      ? '<span class="chip">… 另有 ' + (data.items.length - 48) + ' 项</span>'
+    var cap = unit === '种' ? 30 : 48;
+    el.innerHTML = data.items.slice(0, cap).map(function (item) {
+      var count = item.count != null && item.count > 1 ? '<span class="n">×' + item.count + '</span>' : '';
+      return '<span class="chip" title="' + escapeHtml(item.raw || item.name) + '">' + escapeHtml(item.name) + count + '</span>';
+    }).join('') + (data.items.length > cap
+      ? '<span class="chip">… 另有 ' + (data.items.length - cap) + ' 项</span>'
       : '');
   }
 
-  function renderCalibrate(metrics) {
-    var grid = $('#calibrateGrid');
-    var numeric = metrics.fields.filter(function (f) {
-      return typeof f.value === 'number' && isFinite(f.value);
-    });
-
-    grid.innerHTML = BINDABLE.map(function (item) {
-      var rule = P.Metrics.RULES[item.key];
-      var currentPath = metrics.found[item.key] ? metrics.found[item.key].field.path : '';
-
-      var candidates = numeric.slice();
-      candidates.sort(function (a, b) {
-        return relevance(b, rule) - relevance(a, rule);
-      });
-      candidates = candidates.slice(0, 60);
-
-      var hasCurrent = candidates.some(function (c) { return c.path === currentPath; });
-      if (currentPath && !hasCurrent) {
-        var hit = metrics.fields.filter(function (f) { return f.path === currentPath; })[0];
-        candidates.unshift(hit || { path: currentPath, value: '' });
-      }
-
-      var options = ['<option value="">自动识别</option>'].concat(candidates.map(function (c) {
-        var sel = c.path === currentPath ? ' selected' : '';
-        var text = c.path.length > 42 ? '…' + c.path.slice(-41) : c.path;
-        return '<option value="' + escapeHtml(c.path) + '"' + sel + ' title="' + escapeHtml(c.path) + '">' +
-          escapeHtml(text) + '</option>';
-      })).join('');
-
-      return '' +
-        '<div class="calib-row">' +
-        '<label>' + item.label + '</label>' +
-        '<select data-bind-key="' + item.key + '">' + options + '</select>' +
-        '</div>';
-    }).join('');
-  }
-
-  function relevance(field, rule) {
-    if (!rule) return 0;
-    var score = Math.max(0, 6 - field.depth) * 2;
-    for (var i = 0; i < rule.include.length; i++) {
-      if (rule.include[i].test(field.key)) score += 12;
-    }
-    return score;
-  }
-
   /* ------------------------------------------------------------------ *
-   * 渲染：原始数据
+   * 原始数据（JSON 树）
    * ------------------------------------------------------------------ */
-  function keyToText(k) {
-    if (k == null) return '';
-    if (typeof k === 'string') return k;
-    if (typeof k === 'number') return String(k);
-    if (typeof k === 'object') {
-      if (k.__children && k.__children.length) {
-        var f = k.__children[0];
-        return String(f.value != null ? f.value : f.name);
-      }
-      return '[结构]';
-    }
-    return String(k);
+  function isContainer(v) {
+    return v && typeof v === 'object';
   }
 
-  function childNodes(node) {
-    var v = node.value;
-    if (!v || !v.__children) return null;
-    if (v.__map) {
-      return v.__children.map(function (e) {
-        return {
-          name: '[' + keyToText(e.key) + ']',
-          type: 'Entry',
-          value: e.value,
-          mapKey: keyToText(e.key)
-        };
-      });
-    }
-    return v.__children;
+  function containerSize(v) {
+    return Array.isArray(v) ? v.length : Object.keys(v).length;
   }
 
-  function isScalar(v) {
-    return v == null || typeof v !== 'object';
+  function typeOf(v) {
+    if (Array.isArray(v)) return 'array';
+    if (v === null) return 'null';
+    if (isContainer(v)) return 'object';
+    return typeof v;
   }
 
-  function valueText(node) {
-    var v = node.value;
-    if (v && typeof v === 'object' && !v.__children) {
-      if (v.hex) return '0x' + v.hex;
-      return '[原始数据]';
-    }
-    if (v == null) return 'null';
-    if (typeof v === 'boolean') return v ? 'true' : 'false';
+  function valueText(v) {
+    if (v === null) return 'null';
+    if (typeof v === 'boolean') return String(v);
     if (typeof v === 'number') return fmtNum(v);
-    if (Array.isArray(v)) return v.map(function (n) { return fmtNum(n); }).join(', ');
-    return String(v);
+    if (typeof v === 'string') return v.length > 220 ? v.slice(0, 220) + '…' : v;
+    return '';
   }
 
-  function buildTree(nodes, depth, parentPath, out) {
-    var limit = Math.min(nodes.length, MAX_TREE_CHILDREN);
+  function valueClass(v) {
+    if (typeof v === 'string') return ' is-str';
+    if (typeof v === 'boolean') return ' is-bool';
+    if (v === null) return ' is-null';
+    return '';
+  }
+
+  /** 深度优先收集所有叶子路径，供搜索使用 */
+  function flatten(value, prefix, out) {
+    if (out.length > 40000) return;
+    if (isContainer(value)) {
+      var keys = Object.keys(value);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var path = prefix ? prefix + '.' + k : k;
+        var v = value[k];
+        if (isContainer(v)) flatten(v, path, out);
+        else out.push({ path: path, value: v });
+      }
+    }
+  }
+
+  function buildJsonTree(value, depth, prefix, out) {
+    var keys = Array.isArray(value) ? value.map(function (_, i) { return i; }) : Object.keys(value);
+    var limit = Math.min(keys.length, MAX_TREE_CHILDREN);
 
     for (var i = 0; i < limit; i++) {
-      var node = nodes[i];
-      if (!node) continue;
-      var name = node.name || String(i);
-      var path = parentPath ? parentPath + '.' + name : name;
-      var children = childNodes(node);
-      var hasChildren = !!(children && children.length);
-
-      var valueCls = '';
-      if (isScalar(node.value)) {
-        if (typeof node.value === 'string') valueCls = ' is-str';
-        else if (typeof node.value === 'boolean') valueCls = ' is-bool';
-        else if (node.value == null) valueCls = ' is-null';
-      }
+      var k = keys[i];
+      var v = value[k];
+      var name = String(k);
+      var path = prefix ? prefix + '.' + name : name;
+      var isBox = isContainer(v);
+      var count = isBox ? containerSize(v) : 0;
 
       var row = document.createElement('div');
-      row.className = 'tree-row' + (hasChildren && depth < 1 ? ' is-open' : '');
+      row.className = 'tree-row' + (isBox && depth < 1 ? ' is-open' : '');
       row.style.paddingLeft = depth * 15 + 6 + 'px';
       row.dataset.path = path;
       row.innerHTML =
-        '<span class="tree-caret' + (hasChildren ? '' : ' leaf') + '">▶</span>' +
+        '<span class="tree-caret' + (isBox && count ? '' : ' leaf') + '">▶</span>' +
         '<span class="tree-name">' + escapeHtml(name) + '</span>' +
-        '<span class="tree-type">' + escapeHtml(String(node.type || '').replace('Property', '')) + '</span>' +
-        (hasChildren
-          ? '<span class="tree-val is-null">' + children.length + ' 项</span>'
-          : '<span class="tree-val' + valueCls + '">' + escapeHtml(valueText(node)) + '</span>') +
-        (isScalar(node.value) && typeof node.value === 'number'
-          ? '<button type="button" class="tree-bind" data-bind="' + escapeHtml(path) + '">绑定…</button>'
-          : '');
-
+        '<span class="tree-type">' + escapeHtml(typeOf(v)) + '</span>' +
+        (isBox
+          ? '<span class="tree-val is-null">' + count + ' 项</span>'
+          : '<span class="tree-val' + valueClass(v) + '">' + escapeHtml(valueText(v)) + '</span>');
       out.appendChild(row);
 
-      if (hasChildren) {
+      if (isBox && count) {
         var wrap = document.createElement('div');
-        wrap.className = 'tree-children';
-        if (depth < 1) wrap.classList.add('is-open');
+        wrap.className = 'tree-children' + (depth < 1 ? ' is-open' : '');
         out.appendChild(wrap);
-        buildTree(children, depth + 1, path, wrap);
+        buildJsonTree(v, depth + 1, path, wrap);
 
-        if (children.length > MAX_TREE_CHILDREN) {
+        if (count > MAX_TREE_CHILDREN) {
           var more = document.createElement('div');
           more.className = 'tree-row';
           more.style.paddingLeft = (depth + 1) * 15 + 6 + 'px';
-          more.innerHTML = '<span class="tree-caret leaf"></span><span class="tree-val is-null">… 省略 ' +
-            (children.length - MAX_TREE_CHILDREN) + ' 项</span>';
+          more.innerHTML = '<span class="tree-caret leaf"></span><span class="tree-val is-null">… 省略 ' + (count - MAX_TREE_CHILDREN) + ' 项</span>';
           wrap.appendChild(more);
         }
       }
-    }
-
-    if (nodes.length > MAX_TREE_CHILDREN) {
-      var more2 = document.createElement('div');
-      more2.className = 'tree-row';
-      more2.style.paddingLeft = depth * 15 + 6 + 'px';
-      more2.innerHTML = '<span class="tree-caret leaf"></span><span class="tree-val is-null">… 省略 ' +
-        (nodes.length - MAX_TREE_CHILDREN) + ' 项</span>';
-      out.appendChild(more2);
     }
   }
 
   function renderRaw() {
     var wrap = $('#rawTree');
-    var search = state.search.trim();
-    var entry = current();
-    if (!entry || entry.error) return;
+    var slot = currentSlot();
+    if (!slot || !slot.json) return;
 
-    var rootChildren = entry.parsed.root;
+    var search = state.search.trim().toLowerCase();
+    wrap.innerHTML = '';
 
     if (search) {
-      var fields = state.fields.filter(function (f) {
-        return f.path.toLowerCase().indexOf(search.toLowerCase()) >= 0;
-      });
-      $('#rawStat').textContent = fields.length + ' 条匹配';
-      wrap.innerHTML = '';
+      var flat = [];
+      flatten(slot.json, '', flat);
+      var hits = flat.filter(function (f) { return f.path.toLowerCase().indexOf(search) >= 0; });
 
-      if (!fields.length) {
+      $('#rawStat').textContent = hits.length + ' 条匹配';
+
+      if (!hits.length) {
         wrap.innerHTML = '<div class="tree-row"><span class="tree-caret leaf"></span><span class="tree-val is-null">没有匹配的字段</span></div>';
         return;
       }
 
-      fields.slice(0, 300).forEach(function (f) {
+      hits.slice(0, 300).forEach(function (f) {
         var row = document.createElement('div');
         row.className = 'tree-row';
         row.dataset.path = f.path;
-        var valText = typeof f.value === 'string' ? f.value : (typeof f.value === 'boolean' ? String(f.value) : fmtNum(f.value));
-        var cls = typeof f.value === 'string' ? ' is-str' : typeof f.value === 'boolean' ? ' is-bool' : '';
         row.innerHTML =
           '<span class="tree-caret leaf"></span>' +
           '<span class="tree-name">' + highlight(f.path, search) + '</span>' +
-          '<span class="tree-val' + cls + '">' + escapeHtml(valText) + '</span>' +
-          (typeof f.value === 'number'
-            ? '<button type="button" class="tree-bind" data-bind="' + escapeHtml(f.path) + '">绑定…</button>'
-            : '');
+          '<span class="tree-val' + valueClass(f.value) + '">' + escapeHtml(valueText(f.value)) + '</span>';
         wrap.appendChild(row);
       });
 
-      if (fields.length > 300) {
+      if (hits.length > 300) {
         var more = document.createElement('div');
         more.className = 'tree-row';
-        more.innerHTML = '<span class="tree-caret leaf"></span><span class="tree-val is-null">… 还有 ' + (fields.length - 300) + ' 条</span>';
+        more.innerHTML = '<span class="tree-caret leaf"></span><span class="tree-val is-null">… 还有 ' + (hits.length - 300) + ' 条</span>';
         wrap.appendChild(more);
       }
       return;
     }
 
-    $('#rawStat').textContent = state.fields.length + ' 个字段';
-    wrap.innerHTML = '';
-    buildTree(rootChildren, 0, '', wrap);
+    var all = [];
+    flatten(slot.json, '', all);
+    $('#rawStat').textContent = all.length + ' 个字段';
+    buildJsonTree(slot.json, 0, '', wrap);
   }
 
   function highlight(text, q) {
-    var idx = text.toLowerCase().indexOf(q.toLowerCase());
+    var idx = text.toLowerCase().indexOf(q);
     if (idx < 0) return escapeHtml(text);
     return escapeHtml(text.slice(0, idx)) +
       '<mark>' + escapeHtml(text.slice(idx, idx + q.length)) + '</mark>' +
       escapeHtml(text.slice(idx + q.length));
   }
 
-  function renderMeta(metrics) {
-    var h = metrics.header;
+  function renderMeta() {
+    var h = state.save.header;
+    var slot = currentSlot();
     var rows = [
-      ['存档类', metrics.meta.className || '—'],
-      ['GVAS 版本', String(h.saveGameVersion)],
-      ['引擎版本', metrics.meta.engine + (h.engineVersion
-        ? '.' + h.engineVersion.patch + (h.engineVersion.branch ? ' · ' + h.engineVersion.branch : '')
-        : '')],
-      ['压缩', metrics.meta.compressed ? '是（已解压）' : '否'],
-      ['文件大小', fmtBytes(metrics.meta.size)],
-      ['解析字段', metrics.meta.parsedLeaves + ' 个叶子节点'],
-      ['字节覆盖率', (metrics.meta.consumedRatio * 100).toFixed(1) + '%'],
-      ['自定义版本', (h.customVersions || []).map(function (v) {
-        return (v.name || v.guid.slice(0, 8)) + '=' + v.version;
-      }).join(', ') || '—']
+      ['容器', 'PBZS v' + h.version + '（flags 0x' + h.flags.toString(16) + '）'],
+      ['槽位总数', String(h.slotCount)],
+      ['目录长度', h.directorySize + ' 字节'],
+      ['当前槽位', slot ? slot.name : '—'],
+      ['压缩算法', slot ? ({ 0: '原始 JSON', 1: 'zlib', 2: 'Oodle Kraken' }[slot.algorithm] || '未知 ' + slot.algorithm) : '—'],
+      ['解压后', slot ? fmtBytes(slot.rawSize) : '—'],
+      ['文件大小', fmtBytes(state.file.size)],
+      ['解密密钥', state.key ? '自定义' : '内置（build 26266538）'],
+      ['解析耗时', state.parseMs + ' ms']
     ];
 
     $('#metaList').innerHTML = rows.map(function (r) {
       return '<dt>' + escapeHtml(r[0]) + '</dt><dd>' + escapeHtml(r[1]) + '</dd>';
     }).join('');
 
+    var failed = state.slots.filter(function (s) { return s.error; });
     var warn = $('#warnBox');
-    if (metrics.warnings && metrics.warnings.length) {
+    if (failed.length) {
       warn.hidden = false;
-      warn.innerHTML = '<b>解析提示（' + metrics.warnings.length + '）</b><br>' +
-        metrics.warnings.slice(0, 30).map(function (w) { return escapeHtml(w); }).join('<br>');
+      warn.innerHTML = '<b>有 ' + failed.length + ' 个槽位解压失败</b><br>' +
+        failed.map(function (s) { return escapeHtml(s.name + '：' + s.error); }).join('<br>');
     } else {
       warn.hidden = true;
     }
   }
 
   /* ------------------------------------------------------------------ *
-   * 交互：绑定
+   * 交互
    * ------------------------------------------------------------------ */
-  function beginBind(btn, path) {
-    var sel = document.createElement('select');
-    sel.className = 'tree-bind-select';
-    sel.innerHTML = '<option value="">绑定到…</option>' + BINDABLE.map(function (b) {
-      var bound = state.overrides[b.key] === path ? ' selected' : '';
-      return '<option value="' + b.key + '"' + bound + '>' + b.label + '</option>';
-    }).join('');
-
-    btn.style.display = 'none';
-    btn.parentNode.insertBefore(sel, btn.nextSibling);
-    sel.focus();
-
-    function cleanup() {
-      sel.remove();
-      btn.style.display = '';
-    }
-
-    sel.addEventListener('change', function () {
-      var key = sel.value;
-      if (key) {
-        state.overrides[key] = path;
-        saveOverrides();
-        document.dispatchEvent(new CustomEvent('pbz:refresh'));
-      }
-      cleanup();
-    });
-
-    sel.addEventListener('blur', function () {
-      setTimeout(cleanup, 120);
-    });
+  function switchSlot(index) {
+    if (index === state.active) return;
+    state.active = index;
+    renderResult();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  /* ------------------------------------------------------------------ *
-   * 导出
-   * ------------------------------------------------------------------ */
-  function exportJson() {
-    var metrics = buildMetrics();
-    if (!metrics) return;
-    var found = {};
-    Object.keys(metrics.found).forEach(function (k) {
-      if (metrics.found[k]) {
-        found[k] = { path: metrics.found[k].field.path, value: metrics.found[k].field.value };
-      }
+  function setTab(name) {
+    state.tab = name;
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
+      t.classList.toggle('is-active', t.getAttribute('data-tab') === name);
     });
-    var payload = {
-      tool: 'pbz-save-inspector',
-      generatedAt: new Date().toISOString(),
-      meta: metrics.meta,
-      view: metrics.view,
-      foundFields: found,
-      warnings: metrics.warnings
-    };
-    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'pbz-save-' + new Date().toISOString().slice(0, 10) + '.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+    $('#panelOverview').hidden = name !== 'overview';
+    $('#panelRaw').hidden = name !== 'raw';
+    if (name === 'raw') renderRaw();
   }
 
-  async function exportCard() {
-    if (!state.view) return;
-    var btn = $('#btnShare');
-    var old = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = '生成中…';
-    try {
-      var d = new Date();
-      var dateText = d.getFullYear() + '.' +
-        String(d.getMonth() + 1).padStart(2, '0') + '.' +
-        String(d.getDate()).padStart(2, '0');
-      var canvas = P.ShareCard.draw(state.view, { dateText: dateText });
-      var ok = await P.ShareCard.download(canvas, '影之刃零存档战绩_' + dateText + '.png');
-      if (!ok) throw new Error('图片生成失败');
-    } catch (err) {
-      alert('生成图片失败：' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = old;
-    }
-  }
-
-  /* ------------------------------------------------------------------ *
-   * 事件
-   * ------------------------------------------------------------------ */
-  function init() {
-    state.overrides = loadOverrides();
-
-    var dropzone = $('#dropzone');
-    var fileInput = $('#fileInput');
+  function bindEvents() {
+    var dz = $('#dropzone');
+    var input = $('#fileInput');
     var dirInput = $('#dirInput');
 
-    function pick(input) {
-      input.value = '';
-      input.click();
-    }
-
-    dropzone.addEventListener('click', function (e) {
-      if (e.target.closest('button')) return;
-      pick(fileInput);
+    $('#btnPickFile').addEventListener('click', function (e) { e.stopPropagation(); input.click(); });
+    $('#btnPickDir').addEventListener('click', function (e) { e.stopPropagation(); dirInput.click(); });
+    dz.addEventListener('click', function () { input.click(); });
+    dz.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
     });
 
-    dropzone.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        pick(fileInput);
-      }
+    input.addEventListener('change', function () {
+      if (this.files && this.files.length) handleFileList(this.files);
+      this.value = '';
     });
-
-    $('#btnPickFile').addEventListener('click', function (e) {
-      e.stopPropagation();
-      pick(fileInput);
-    });
-
-    $('#btnPickDir').addEventListener('click', function (e) {
-      e.stopPropagation();
-      pick(dirInput);
-    });
-
-    fileInput.addEventListener('change', function () {
-      if (fileInput.files.length) handleFileList(fileInput.files);
-    });
-
     dirInput.addEventListener('change', function () {
-      if (dirInput.files.length) handleFileList(dirInput.files);
+      if (this.files && this.files.length) handleFileList(this.files);
+      this.value = '';
     });
 
-    var dragDepth = 0;
-    dropzone.addEventListener('dragenter', function (e) {
-      e.preventDefault();
-      dragDepth++;
-      dropzone.classList.add('is-drag');
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.classList.add('is-over');
+      });
     });
-    dropzone.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
+    ['dragleave', 'drop'].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (ev === 'dragleave' && dz.contains(e.relatedTarget)) return;
+        dz.classList.remove('is-over');
+      });
     });
-    dropzone.addEventListener('dragleave', function (e) {
-      e.preventDefault();
-      dragDepth = Math.max(0, dragDepth - 1);
-      if (!dragDepth) dropzone.classList.remove('is-drag');
-    });
-    dropzone.addEventListener('drop', async function (e) {
-      e.preventDefault();
-      dragDepth = 0;
-      dropzone.classList.remove('is-drag');
+    dz.addEventListener('drop', async function (e) {
       var files = await filesFromDrop(e.dataTransfer);
       if (files.length) handleFileList(files);
     });
 
-    // 整页拖拽兜底
-    window.addEventListener('dragover', function (e) { e.preventDefault(); });
-    window.addEventListener('drop', function (e) {
-      if (e.target.closest && e.target.closest('#dropzone')) return;
-      e.preventDefault();
-      filesFromDrop(e.dataTransfer).then(function (files) {
-        if (files.length) handleFileList(files);
-      });
+    // 阻止浏览器在页面其它位置打开拖入的文件
+    ['dragover', 'drop'].forEach(function (ev) {
+      window.addEventListener(ev, function (e) { e.preventDefault(); }, false);
     });
 
-    $('#btnSample').addEventListener('click', function () {
-      var bytes = P.SampleSave.decode();
-      var file = new File([bytes], 'PBZSaveGame.sav', { type: 'application/octet-stream' });
-      handleFileList([file]);
-    });
-
+    $('#btnErrBack').addEventListener('click', function () { showStage('stageUpload'); });
     $('#btnAgain').addEventListener('click', function () {
-      state.entries = [];
-      state.fields = [];
-      state.search = '';
-      $('#rawSearch').value = '';
-      showStage('stageUpload');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-
-    $('#btnErrBack').addEventListener('click', function () {
+      state.save = null;
+      state.slots = [];
       showStage('stageUpload');
     });
 
-    $('#btnExport').addEventListener('click', exportJson);
-    $('#btnShare').addEventListener('click', exportCard);
-
-    $('#btnResetCalib').addEventListener('click', function () {
-      state.overrides = {};
-      saveOverrides();
-      renderResult();
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
+      t.addEventListener('click', function () { setTab(t.getAttribute('data-tab')); });
     });
 
-    // tab
-    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (tab) {
-      tab.addEventListener('click', function () {
-        var name = tab.dataset.tab;
-        state.tab = name;
-        Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
-          t.classList.toggle('is-active', t === tab);
-        });
-        $('#panelOverview').hidden = name !== 'overview';
-        $('#panelRaw').hidden = name !== 'raw';
-      });
+    $('#slotGrid').addEventListener('click', function (e) {
+      var card = e.target.closest('.slot-card');
+      if (!card || card.disabled) return;
+      switchSlot(Number(card.getAttribute('data-slot')));
     });
 
-    // 树：展开 / 折叠 & 绑定
-    $('#rawTree').addEventListener('click', function (e) {
-      var bindBtn = e.target.closest('.tree-bind');
-      if (bindBtn) {
-        e.stopPropagation();
-        beginBind(bindBtn, bindBtn.getAttribute('data-bind'));
-        return;
-      }
-
-      var row = e.target.closest('.tree-row');
-      if (!row) return;
-      var children = row.nextElementSibling;
-      if (children && children.classList.contains('tree-children')) {
-        children.classList.toggle('is-open');
-        row.classList.toggle('is-open', children.classList.contains('is-open'));
-      }
-    });
-
-    // 搜索
     var searchTimer = null;
-    $('#rawSearch').addEventListener('input', function (e) {
+    $('#rawSearch').addEventListener('input', function () {
+      var v = this.value;
       clearTimeout(searchTimer);
-      var v = e.target.value;
       searchTimer = setTimeout(function () {
         state.search = v;
         renderRaw();
       }, 160);
     });
 
-    // 校准
-    $('#calibrateGrid').addEventListener('change', function (e) {
-      var sel = e.target.closest('select[data-bind-key]');
-      if (!sel) return;
-      var key = sel.getAttribute('data-bind-key');
-      if (sel.value) state.overrides[key] = sel.value;
-      else delete state.overrides[key];
-      saveOverrides();
-      renderResult();
+    // 展开/收起
+    $('#rawTree').addEventListener('click', function (e) {
+      var row = e.target.closest('.tree-row');
+      if (!row) return;
+      var caret = row.querySelector('.tree-caret');
+      if (!caret || caret.classList.contains('leaf')) return;
+      row.classList.toggle('is-open');
+      var next = row.nextElementSibling;
+      if (next && next.classList.contains('tree-children')) next.classList.toggle('is-open');
     });
 
-    // 文件切换
-    $('#fileSwitch').addEventListener('click', function (e) {
-      var pill = e.target.closest('.file-pill');
-      if (!pill) return;
-      var idx = Number(pill.getAttribute('data-index'));
-      var entry = state.entries[idx];
-      if (entry.error) {
-        showError('这个文件解析失败', escapeHtml(entry.name) + '：' + escapeHtml(entry.error));
+    // 导出 JSON
+    $('#btnExport').addEventListener('click', function () {
+      var slot = currentSlot();
+      if (!slot || !slot.json) return;
+      var blob = new Blob([JSON.stringify(slot.json, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = slot.name.replace(/^__|__$/g, '') + '.json';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    });
+
+    // 战绩卡
+    $('#btnShare').addEventListener('click', function () {
+      if (!state.view) return;
+      var canvas = P.ShareCard.draw(state.view);
+      P.ShareCard.download(canvas, 'yingzhi-ling-zhanji.png');
+    });
+
+    // 自定义密钥
+    $('#btnKeyApply').addEventListener('click', function () {
+      var raw = $('#keyInput').value.trim();
+      if (!raw) {
+        state.key = '';
+        localStorage.removeItem(KEY_STORAGE);
+        if (state.file) handleFileList([state.file]);
         return;
       }
-      state.active = idx;
-      state.search = '';
-      $('#rawSearch').value = '';
-      renderResult();
-    });
-
-    document.addEventListener('pbz:refresh', function () {
-      renderResult();
-    });
-
-    // 暴露只读接口，便于调试 / 二次开发
-    window.PBZApp = {
-      getView: function () { return state.view; },
-      getMetrics: function () { return buildMetrics(); },
-      getFields: function () { return state.fields; },
-      setOverride: function (key, path) {
-        state.overrides[key] = path;
-        saveOverrides();
-        renderResult();
+      try {
+        P.Save.hexToBytes(raw);
+      } catch (err) {
+        alert(err.message);
+        return;
       }
-    };
+      state.key = raw;
+      localStorage.setItem(KEY_STORAGE, raw);
+      if (state.file) handleFileList([state.file]);
+    });
 
-    // 说明弹层
+    // 示例存档
+    var sampleBtn = $('#btnSample');
+    if (sampleBtn) {
+      sampleBtn.addEventListener('click', async function () {
+        try {
+          $('#loaderText').textContent = '正在载入示例…';
+          $('#loaderSub').textContent = '内置演示存档';
+          showStage('stageLoading');
+          var res = await fetch('samples/demo-pbzs.sav');
+          if (!res.ok) throw new Error('示例存档加载失败（HTTP ' + res.status + '）');
+          var buf = await res.arrayBuffer();
+          var file = new File([buf], 'PBZSaveGame.sav', { type: 'application/octet-stream' });
+          handleFileList([file]);
+        } catch (err) {
+          showError('示例没能载入', escapeHtml(err.message) + '<br><br>本地直接双击打开 HTML 时浏览器会拦截读取，请用 <code>python -m http.server</code> 或线上地址访问。');
+        }
+      });
+    }
+
+    // 引导弹层
     var modal = $('#guideModal');
     $('#btnGuide').addEventListener('click', function () { modal.hidden = false; });
     modal.addEventListener('click', function (e) {
-      if (e.target.closest('[data-close]')) modal.hidden = true;
+      if (e.target.dataset.close) modal.hidden = true;
     });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') modal.hidden = true;
     });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 启动
+   * ------------------------------------------------------------------ */
+  function init() {
+    bindEvents();
+
+    try {
+      var saved = localStorage.getItem(KEY_STORAGE);
+      if (saved && /^[0-9a-fA-F]{64}$/.test(saved)) {
+        state.key = saved;
+        $('#keyInput').value = saved;
+      }
+    } catch (e) { /* 隐私模式下忽略 */ }
+
+    // 暴露只读接口，便于调试
+    window.PBZApp = {
+      getView: function () { return state.view; },
+      getSlots: function () { return state.slots.map(function (s) { return { name: s.name, ok: !!s.json, error: s.error }; }); },
+      getCurrent: function () { return currentSlot(); }
+    };
   }
 
   if (document.readyState === 'loading') {

@@ -208,7 +208,7 @@
     ctx.fillText(view.completion != null ? Math.round(view.completion) + '%' : '—', ringCx, ringCy + 2);
     ctx.fillStyle = C.faint;
     ctx.font = '400 11px ' + SANS;
-    withSpacing(ctx, '完成度', ringCx, ringCy + 24, 2, 'center');
+    withSpacing(ctx, '首领击破', ringCx, ringCy + 24, 2, 'center');
     ctx.textAlign = 'left';
 
     line(ctx, PAD, 566, W - PAD, 566, 'rgba(255,255,255,0.08)');
@@ -259,7 +259,7 @@
       maxDeaths = Math.max(maxDeaths, bosses[b].deaths || 0);
     }
 
-    var rowY = 846;
+    var rowY = 884;
     for (var k = 0; k < bosses.length; k++) {
       var boss = bosses[k];
       var isTop = k === 0;
@@ -305,7 +305,7 @@
       ctx.fillText('次', W - PAD, rowY + 19);
       ctx.textAlign = 'left';
 
-      rowY += 62;
+      rowY += 70;
     }
 
     if (!bosses.length) {
@@ -316,10 +316,10 @@
     }
 
     /* 收集进度 */
-    var colY = Math.max(rowY + 30, 1128);
-    if (view.collectibles && view.collectibles.length && colY < H - 190) {
-      line(ctx, PAD, colY - 24, W - PAD, colY - 24, 'rgba(255,255,255,0.08)');
-      var cols = view.collectibles.slice(0, 3);
+    var colY = H - 196;
+    if (view.collectibles && view.collectibles.length) {
+      line(ctx, PAD, colY - 30, W - PAD, colY - 30, 'rgba(255,255,255,0.08)');
+      var cols = view.collectibles.slice(0, 5);
       var cw = (W - PAD * 2) / Math.max(cols.length, 1);
 
       for (var c2 = 0; c2 < cols.length; c2++) {
@@ -339,12 +339,7 @@
           ctx.fillText('/ ' + col.total, cx2 + 18 + vw2, colY + 40);
         }
 
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.fillRect(cx2 + 12, colY + 54, cw - 40, 2);
-        if (col.percent != null) {
-          ctx.fillStyle = C.gold;
-          ctx.fillRect(cx2 + 12, colY + 54, Math.max(2, (cw - 40) * (col.percent / 100)), 2);
-        }
+
       }
     }
 

@@ -57,7 +57,7 @@
           <span class="dz-dot">·</span>
           <button type="button" class="text-btn" id="btnPickDir">选择存档文件夹</button>
         </p>
-        <p class="dz-hint">支持一次选中多个存档（主档 / RealTime / Hourly 备份），自动识别主存档</p>
+        <p class="dz-hint">整份 <code>PBZSaveGame.sav</code> 内含全部手动与自动存档，解析后可切换查看</p>
       </div>
       <div class="dz-scan" aria-hidden="true"></div>
     </div>
@@ -71,7 +71,7 @@
     </div>
 
     <ul class="features">
-      <li><b>GVAS 全格式</b><span>UE4 / UE5 存档，含压缩档</span></li>
+      <li><b>PBZS v3 解密</b><span>本地解开封存块，Oodle 解压</span></li>
       <li><b>不止时长</b><span>Boss 战死数、收集、武器、货币</span></li>
       <li><b>可分享</b><span>一键导出战绩长图</span></li>
     </ul>
@@ -158,7 +158,7 @@
               </svg>
               <div class="ring-label">
                 <b id="completionVal">—</b>
-                <span>完成度</span>
+                <span>首领击破</span>
               </div>
             </div>
           </div>
@@ -218,17 +218,14 @@
         </article>
       </div>
 
-      <!-- 校验 -->
-      <article class="card card-calibrate">
+      <!-- 存档槽 -->
+      <article class="card card-slots">
         <header class="card-head">
-          <h3>字段校准</h3>
-          <span class="card-note">自动识别有偏差时，手动指定字段</span>
+          <h3>存档槽</h3>
+          <span class="card-note" id="slotNote">—</span>
         </header>
-        <p class="calibrate-desc">
-          不同版本的游戏字段命名可能不同。若上面的数值不对，从下列字段中重新指定。<strong>选择会保存在本机</strong>，下次自动套用。
-        </p>
-        <div class="calibrate-grid" id="calibrateGrid"></div>
-        <button class="btn btn-ghost btn-sm" type="button" id="btnResetCalib">清除全部手动绑定</button>
+        <p class="slots-desc">一个 <code>PBZSaveGame.sav</code> 里打包了全部手动档、自动档与账户数据。点选可切换查看。</p>
+        <div class="slot-grid" id="slotGrid"></div>
       </article>
 
       <div class="share-bar">
@@ -247,10 +244,10 @@
       <article class="card">
         <header class="card-head">
           <h3>属性树</h3>
-          <span class="card-note">点击行展开，支持搜索</span>
+          <span class="card-note">解密后的完整 JSON，点击行展开</span>
         </header>
         <div class="raw-toolbar">
-          <input type="search" id="rawSearch" placeholder="搜索字段名或路径，例如 Boss / Death / Weapon" autocomplete="off">
+          <input type="search" id="rawSearch" placeholder="搜索字段名或路径，例如 BossRecord / DiedTimes" autocomplete="off">
           <span class="raw-stat" id="rawStat"></span>
         </div>
         <div class="raw-tree" id="rawTree"></div>
@@ -261,6 +258,11 @@
           <h3>解析信息</h3>
         </header>
         <dl class="meta-list" id="metaList"></dl>
+        <div class="key-box">
+          <label for="keyInput">自定义密钥</label>
+          <input id="keyInput" type="text" spellcheck="false" autocomplete="off" placeholder="64 位十六进制；留空则使用内置密钥">
+          <button class="btn btn-ghost btn-sm" type="button" id="btnKeyApply">应用</button>
+        </div>
         <div class="warn-box" id="warnBox" hidden></div>
       </article>
     </div>
@@ -268,7 +270,7 @@
 
   <footer class="site-foot">
     <p>非官方工具 · 与灵游坊 / S-GAME 无关 · 所有解析在浏览器内完成，不会上传任何文件</p>
-    <p class="dim">GVAS 解析器支持 UE4 / UE5 存档格式；字段缺失时请使用「字段校准」手动指定。</p>
+    <p class="dim">PBZS v3 容器解密与 Oodle 解压全部在浏览器内完成。若游戏大版本更新导致密钥失效，可在解析信息里填入自定义密钥。</p>
   </footer>
 </main>
 
@@ -289,11 +291,10 @@
   </div>
 </div>
 
-<script src="js/gvas-reader.js"></script>
-<script src="js/gvas-parser.js"></script>
-<script src="js/metrics.js"></script>
 <script src="js/boss-atlas.js"></script>
-<script src="js/sample-save.js"></script>
+<script src="js/pbzs.js"></script>
+<script src="js/item-names.js"></script>
+<script src="js/pbz-view.js"></script>
 <script src="js/share-card.js"></script>
 <script src="js/app.js"></script>
 </body>

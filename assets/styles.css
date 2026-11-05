@@ -1605,3 +1605,153 @@ main {
   .boss-card-meta { font-size: 9px; }
   .boss-credit { font-size: 9px; }
 }
+
+/* ---------------- 存档槽 ---------------- */
+
+.slots-desc {
+  margin: 0 0 14px;
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--text-faint);
+}
+.slots-desc code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: 8px;
+}
+
+.slot-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 12px 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.012);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.slot-card:hover {
+  border-color: rgba(211, 176, 120, 0.34);
+  background: rgba(211, 176, 120, 0.045);
+}
+.slot-card.is-active {
+  border-color: rgba(205, 52, 48, 0.55);
+  background: rgba(205, 52, 48, 0.07);
+}
+.slot-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* 账户档（成就 / 图鉴）不是游玩存档，视觉上退后一层 */
+.slot-card.is-meta {
+  background: rgba(255, 255, 255, 0.006);
+  border-style: dashed;
+}
+.slot-card.is-meta .slot-name { color: var(--text-dim); }
+.slot-card.is-meta.is-active .slot-name { color: var(--crimson-bright); }
+.slot-card.is-meta::after {
+  content: '账户';
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  padding: 0 4px;
+  line-height: 1.5;
+}
+
+.slot-name {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+.slot-card.is-active .slot-name { color: var(--crimson-bright); }
+
+.slot-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+
+.slot-size {
+  font-size: 9.5px;
+  color: #7b756e;
+  font-family: var(--font-mono);
+}
+
+.slot-err { color: #c98a7c; }
+
+/* ---------------- 密钥 ---------------- */
+
+.key-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.key-box label {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+.key-box input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  outline: none;
+}
+.key-box input:focus { border-color: rgba(211, 176, 120, 0.5); }
+.key-box input::placeholder { color: #6b655e; }
+
+@media (max-width: 620px) {
+  .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .slot-card { padding: 9px 10px; }
+  .slot-name { font-size: 12px; }
+  .key-box { flex-wrap: wrap; }
+  .key-box input { flex-basis: 100%; order: 3; }
+}
+
+/* 收集统计：改为纯数值，不再按最大值画条 */
+.collect-list .collect-item {
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.012);
+}
+.collect-list .collect-top { align-items: baseline; }
+.collect-list .collect-name { font-size: 11.5px; color: var(--text-dim); }
+.collect-list .collect-val {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  color: var(--text);
+  font-feature-settings: "tnum";
+}
+.collect-list .collect-val small {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: 2px;
+}

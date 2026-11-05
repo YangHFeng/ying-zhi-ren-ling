@@ -87,6 +87,7 @@
     { id: "BP_Monster_MengHua", name: "救苦救难梦华圣母娘娘", region: "断魂山", img: "assets/bosses/81740.png" },
     { id: "BP_Monster_ZuoShang_Ending", name: "“组织”冥主：左殇（银发）", region: "断魂山", img: "assets/bosses/81750.png" },
     { id: "BP_Monster_ZuoShang_P2", name: "左殇：真龙之躯", region: "断魂山", img: "assets/bosses/81760.png" },
+    { id: "BP_Monster_HookMan", name: "追命", region: "悲泣溪谷", img: "assets/bosses/80260.png" },
   ];
 
   var byId = {};
